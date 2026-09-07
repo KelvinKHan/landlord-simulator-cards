@@ -5,3 +5,6 @@
 
 # 原始导出作为完整备份保存，禁止 Git 自动转换换行。
 originals/*.json -text
+
+# 新卡开场保留原卡 CRLF，保证本地与 Linux CI 导出字节一致。
+src/content/first-message.txt -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol

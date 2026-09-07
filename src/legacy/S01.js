@@ -59,36 +59,6 @@ const Schema = z.object({
         }).prefault({})
     ).prefault({}),
 
-    // 大富翁变量
-    大富翁: z.object({
-        筹码: z.coerce.number().transform(v => Math.max(v, 0)).prefault(5000),
-        回合: z.coerce.number().prefault(0),
-        位置: z.coerce.number().prefault(0),
-        据点: z.record(
-            z.string().describe('格子ID'),
-            z.object({
-                光顾次数: z.coerce.number().prefault(0),
-                投资额: z.coerce.number().prefault(0),
-                等级: z.coerce.number().prefault(0),
-            }).prefault({})
-        ).prefault({}),
-        队伍: z.array(z.string()).prefault([]),
-        道具: z.record(
-            z.string().describe('道具名'),
-            z.coerce.number().prefault(0)
-        ).prefault({}),
-        监狱回合: z.coerce.number().prefault(0),
-        最近事件: z.array(z.string()).prefault([]),
-    }).prefault({}),
-
-    // 分基地（简化版房产）
-    分基地: z.record(
-        z.string().describe('基地名'),
-        z.object({
-            描述: z.string().prefault(''),
-            住户: z.array(z.string()).prefault([]),
-        }).prefault({})
-    ).prefault({}),
 }).superRefine((data, ctx) => {
     // ==================== 跨字段一致性校验 ====================
     const tenantNames = new Set(Object.keys(data.租客列表 || {}));

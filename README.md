@@ -2,21 +2,23 @@
 
 《房东模拟器》的 SillyTavern 维护仓库。作者拥有原卡及本仓库。
 
-当前候选版：**5.21.0-rc.1**。已实现单一酒馆助手入口、原版/二改版选择、按正式 Release 更新脚本与官方世界书，以及启动、异步写入和重绘的时序修复。原始 Z5.20 卡保持不变；大富翁不进入新版运行模块。
+当前候选版：**5.21.0-rc.2**。已实现单一酒馆助手入口、原版/二改版选择、按正式 Release 更新脚本与官方世界书，以及启动、异步写入和重绘的时序修复。本版进一步移除大富翁、分基地的变量定义、世界书内容和新卡开场说明；原始 Z5.20 卡保持不变。
 
 ## 导入与游玩
 
-1. 下载 [新版 PNG](exports/房东模拟器Z5.21.0-rc.1.png) 或 [新版 JSON](exports/房东模拟器Z5.21.0-rc.1.json)，任选一种导入 SillyTavern。
+1. 下载 [新版 PNG](exports/房东模拟器Z5.21.0-rc.2.png) 或 [新版 JSON](exports/房东模拟器Z5.21.0-rc.2.json)，任选一种导入 SillyTavern。
 2. 安装并启用酒馆助手；允许本卡脚本、正则，并导入内置世界书。实际验证版本为 SillyTavern 1.18.0、酒馆助手 4.9.5。
 3. 酒馆助手的角色脚本列表中只有 **房东模拟器 · 单入口**。在游戏右下角选择原版或二改版。
 4. 选择开场后正常游玩。两版保留各自手机记录；切换会关闭当前应用窗口，现有正文记忆不会被清空。
 
 在旧卡上单独替换脚本时，使用 [单入口脚本文件](exports/房东模拟器-单入口脚本.json)，并停用旧卡原有的整组脚本；不要让两组同时运行。原始卡仍可从 [originals](originals/) 取回。
 
+要使用删除大富翁说明后的开场，请导入本版完整卡并新建聊天。脚本更新不会改写旧聊天开场，也不会主动清除旧存档字段；玩家改过的世界书条目在冲突时保留。详见 [大富翁移除范围](docs/removing-monopoly.md)。
+
 入口代码：
 
 ```js
-import 'https://cdn.jsdelivr.net/gh/KelvinKHan/landlord-simulator-cards@v5.21.0-rc.1/dist/bootstrap.js';
+import 'https://cdn.jsdelivr.net/gh/KelvinKHan/landlord-simulator-cards@v5.21.0-rc.2/dist/bootstrap.js';
 ```
 
 入口启动时查询 GitHub **正式 Release**。开发分支提交和候选版不会自动推送给正式版玩家；本入口在尚无正式版时使用自身候选版。详细行为见 [运行与更新说明](docs/runtime-and-updates.md)。

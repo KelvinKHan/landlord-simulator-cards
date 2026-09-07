@@ -49,7 +49,11 @@ try{
   await page.waitForFunction(()=>window.LandlordRuntime?.running,{},{timeout:90000});
   const first=await page.evaluate(()=>({scopes:LandlordRuntime.scopes.length,errors:LandlordRuntime.errors,state:LandlordRuntime.readState(),scripts:TavernHelper.getScriptTrees({type:'character'}).length}));
   assert.equal(first.scopes,20);assert.equal(first.scripts,1);assert.deepEqual(first.errors,[]);assert.ok(first.state.世界);
+  assert.equal(Object.hasOwn(first.state,'大富翁'),false);assert.equal(Object.hasOwn(first.state,'分基地'),false);
+  const liveBook=await page.evaluate(async()=>{const name=TavernHelper.getCharWorldbookNames('current').primary;return TavernHelper.getWorldbook(name)});
+  assert.doesNotMatch(JSON.stringify(liveBook),/大富翁|分基地|monopoly/i);
   report.checks.push('single imported script, original 20 modules, real MVU initialized');
+  report.checks.push('new chat and live character worldbook contain no retired gameplay state or rules');
 
   await page.locator('#landlord-controls summary').click();await page.getByRole('button',{name:'使用二改版',exact:true}).click();
   await page.waitForFunction(()=>LandlordRuntime.mode==='remix' && LandlordRuntime.running);
@@ -63,6 +67,7 @@ try{
   const opening=JSON.parse(card).data.alternate_greetings[0];
   await page.evaluate(async greeting=>{const rt=LandlordRuntime;await rt.rebuildOpening(rt.scopes.find(s=>s.id==='S23'),greeting)},opening);
   assert.equal(await page.evaluate(()=>LandlordRuntime.readState().世界.年份),'2025年');
+  assert.deepEqual(await page.evaluate(()=>Object.keys(LandlordRuntime.readState()).filter(key=>['大富翁','分基地'].includes(key))),[]);
   report.checks.push('workshop opening uses real MVU parse and replace APIs');
   const sample='<companion>候选人:\n名字: "测试租客"\n年龄: "25"</companion>\n<tenantlore>姓名：测试租客\n年龄：25\n描述：原始档案</tenantlore>';
   await page.evaluate(async message=>{await TavernHelper.createChatMessages([{role:'assistant',message}])},sample);

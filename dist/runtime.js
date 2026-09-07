@@ -45,35 +45,6 @@ async function mount(__landlordScope) {
           __landlordScope.value("z").string().describe("\u5173\u7CFB\u63CF\u8FF0")
         ).prefault({})
       }).prefault({})
-    ).prefault({}),
-    // 大富翁变量
-    \u5927\u5BCC\u7FC1: __landlordScope.value("z").object({
-      \u7B79\u7801: __landlordScope.value("z").coerce.number().transform((v) => Math.max(v, 0)).prefault(5e3),
-      \u56DE\u5408: __landlordScope.value("z").coerce.number().prefault(0),
-      \u4F4D\u7F6E: __landlordScope.value("z").coerce.number().prefault(0),
-      \u636E\u70B9: __landlordScope.value("z").record(
-        __landlordScope.value("z").string().describe("\u683C\u5B50ID"),
-        __landlordScope.value("z").object({
-          \u5149\u987E\u6B21\u6570: __landlordScope.value("z").coerce.number().prefault(0),
-          \u6295\u8D44\u989D: __landlordScope.value("z").coerce.number().prefault(0),
-          \u7B49\u7EA7: __landlordScope.value("z").coerce.number().prefault(0)
-        }).prefault({})
-      ).prefault({}),
-      \u961F\u4F0D: __landlordScope.value("z").array(__landlordScope.value("z").string()).prefault([]),
-      \u9053\u5177: __landlordScope.value("z").record(
-        __landlordScope.value("z").string().describe("\u9053\u5177\u540D"),
-        __landlordScope.value("z").coerce.number().prefault(0)
-      ).prefault({}),
-      \u76D1\u72F1\u56DE\u5408: __landlordScope.value("z").coerce.number().prefault(0),
-      \u6700\u8FD1\u4E8B\u4EF6: __landlordScope.value("z").array(__landlordScope.value("z").string()).prefault([])
-    }).prefault({}),
-    // 分基地（简化版房产）
-    \u5206\u57FA\u5730: __landlordScope.value("z").record(
-      __landlordScope.value("z").string().describe("\u57FA\u5730\u540D"),
-      __landlordScope.value("z").object({
-        \u63CF\u8FF0: __landlordScope.value("z").string().prefault(""),
-        \u4F4F\u6237: __landlordScope.value("z").array(__landlordScope.value("z").string()).prefault([])
-      }).prefault({})
     ).prefault({})
   }).superRefine((data, ctx) => {
     const tenantNames = new Set(Object.keys(data.\u79DF\u5BA2\u5217\u8868 || {}));
@@ -25073,7 +25044,7 @@ async function waitUntil(get, { signal, timeout = 2e4, interval = 25 } = {}) {
 }
 
 // src/runtime/entry.js
-var VERSION = "5.21.0-rc.1";
+var VERSION = "5.21.0-rc.2";
 var ORDERS = {
   original: ["S02", "S04", "S07", "S08", "S06", "S09", "S10", "S11", "S12", "S13", "S14", "S15", "S16", "S17", "S18", "S19", "S20", "S21", "S22", "S23"],
   remix: ["S02", "S25", "S26", "S27", "S28", "S29", "S23"]

@@ -26,6 +26,10 @@ def main():
     data['character_version'] = version
     data['character_book'] = json.loads((ROOT / 'src/content/worldbook.json').read_text())
     data['extensions']['regex_scripts'] = json.loads((ROOT / 'src/content/regex.json').read_text())
+    # Keep the legacy top-level field and the V2/V3 field in sync, including CRLF.
+    first_message = (ROOT / 'src/content/first-message.txt').read_bytes().decode('utf-8')
+    data['first_mes'] = first_message
+    card['first_mes'] = first_message
     payload = json.dumps(card, ensure_ascii=False, separators=(',', ':')).encode()
     out = ROOT / 'exports'
     out.mkdir(exist_ok=True)

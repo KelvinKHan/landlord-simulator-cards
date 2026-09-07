@@ -166,7 +166,7 @@ async function updateContent({ api, store, content, baseline, identity, isCurren
 
 // src/updater/release.js
 var REPO = "KelvinKHan/landlord-simulator-cards";
-var FALLBACK_TAG = `v${"5.21.0-rc.1"}`;
+var FALLBACK_TAG = `v${"5.21.0-rc.2"}`;
 async function sha256(text) {
   const bytes = typeof text === "string" ? new TextEncoder().encode(text) : text;
   const hash = await crypto.subtle.digest("SHA-256", bytes);

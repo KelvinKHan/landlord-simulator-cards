@@ -1,0 +1,27 @@
+{
+  "commit": "9ba667e849b970ec36d9ec7f7f41c496a0f4cc50",
+  "tag": "v5.21.0-rc.1",
+  "runs": [
+    {
+      "name": "Verify card and runtime (main)",
+      "id": 34089244883,
+      "commit": "9ba667e849b970ec36d9ec7f7f41c496a0f4cc50",
+      "conclusion": "success",
+      "url": "https://github.com/KelvinKHan/landlord-simulator-cards/actions/runs/34089244883"
+    },
+    {
+      "name": "Verify card and runtime (tag)",
+      "id": 34089246644,
+      "commit": "9ba667e849b970ec36d9ec7f7f41c496a0f4cc50",
+      "conclusion": "success",
+      "url": "https://github.com/KelvinKHan/landlord-simulator-cards/actions/runs/34089246644"
+    },
+    {
+      "name": "Prepare release draft",
+      "id": 34089263929,
+      "commit": "9ba667e849b970ec36d9ec7f7f41c496a0f4cc50",
+      "conclusion": "success",
+      "url": "https://github.com/KelvinKHan/landlord-simulator-cards/actions/runs/34089263929"
+    }
+  ]
+}
