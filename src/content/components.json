@@ -1,0 +1,158 @@
+[
+  {
+    "key": "S01",
+    "id": "f3f40de5-4122-4230-9667-fea223b1dc79",
+    "name": "变量结构（开）",
+    "file": "src/legacy/S01.js"
+  },
+  {
+    "key": "S02",
+    "id": "66627451-dcc2-48f2-ac72-a5bd7b868a3b",
+    "name": "悬浮球管理",
+    "file": "src/legacy/S02.js"
+  },
+  {
+    "key": "S04",
+    "id": "d1e36e05-a9e9-473a-a7ee-e96f60e942bb",
+    "name": "公寓（开）",
+    "file": "src/legacy/S04.js"
+  },
+  {
+    "key": "S06",
+    "id": "418209cc-b7e1-449b-af3b-0c21f5391167",
+    "name": "小手机主程序",
+    "file": "src/legacy/S06.js"
+  },
+  {
+    "key": "S07",
+    "id": "c57bdb90-cb14-4809-81a6-10d30634b4c5",
+    "name": "聊天数据库",
+    "file": "src/legacy/S07.js"
+  },
+  {
+    "key": "S08",
+    "id": "35b23fb4-3b07-4d5b-bb72-e29fc1cf8772",
+    "name": "分析调度器",
+    "file": "src/legacy/S08.js"
+  },
+  {
+    "key": "S09",
+    "id": "5b01a838-a8b0-48ff-9fe2-d2167ff4e337",
+    "name": "租客分析系统",
+    "file": "src/legacy/S09.js"
+  },
+  {
+    "key": "S10",
+    "id": "0230d477-2978-482b-9ea8-dcf199d0b536",
+    "name": "分析队列组件",
+    "file": "src/legacy/S10.js"
+  },
+  {
+    "key": "S11",
+    "id": "c9531838-c27a-4454-84b4-fce80ba308bd",
+    "name": "聊天核心",
+    "file": "src/legacy/S11.js"
+  },
+  {
+    "key": "S12",
+    "id": "9f8c2429-102e-4b32-93a5-0eba1cc1d445",
+    "name": "聊天正文联动",
+    "file": "src/legacy/S12.js"
+  },
+  {
+    "key": "S13",
+    "id": "896a20e4-50a2-49d9-891a-b4addf00b057",
+    "name": "聊天APP",
+    "file": "src/legacy/S13.js"
+  },
+  {
+    "key": "S14",
+    "id": "362876ea-dcdb-4931-b318-6d5897501d33",
+    "name": "租客档案APP",
+    "file": "src/legacy/S14.js"
+  },
+  {
+    "key": "S15",
+    "id": "9551818e-b25a-41d3-827f-846f870dd0fe",
+    "name": "提示词/控制台查看器",
+    "file": "src/legacy/S15.js"
+  },
+  {
+    "key": "S16",
+    "id": "859553e7-2e5d-43f3-bda4-83c489287fe5",
+    "name": "地图",
+    "file": "src/legacy/S16.js"
+  },
+  {
+    "key": "S17",
+    "id": "f1f23023-de3d-4399-a1e1-1fe2e51f1839",
+    "name": "音乐",
+    "file": "src/legacy/S17.js"
+  },
+  {
+    "key": "S18",
+    "id": "211f026b-3508-4b7d-959e-e9812316ce0c",
+    "name": "世界地图",
+    "file": "src/legacy/S18.js"
+  },
+  {
+    "key": "S19",
+    "id": "15daa805-5f02-49d1-92b2-2b1984568a66",
+    "name": "天气APP",
+    "file": "src/legacy/S19.js"
+  },
+  {
+    "key": "S20",
+    "id": "455f7551-4920-4df3-91e1-c8eb3c220841",
+    "name": "新闻",
+    "file": "src/legacy/S20.js"
+  },
+  {
+    "key": "S21",
+    "id": "f5dc17c4-7280-4f8b-b7bf-b2741df36ae6",
+    "name": "和欧欧聊天吧！",
+    "file": "src/legacy/S21.js"
+  },
+  {
+    "key": "S22",
+    "id": "da7f15fe-c867-43ad-a1ab-ec2e6dbe9850",
+    "name": "美化完整修复版 by jovial_dolphin_19209",
+    "file": "src/legacy/S22.js"
+  },
+  {
+    "key": "S23",
+    "id": "1e9c32c7-b5f5-4f3a-920c-3c8c66f59439",
+    "name": "创意工坊main",
+    "file": "src/legacy/S23.js"
+  },
+  {
+    "key": "S25",
+    "id": "8ca027c3-9bc5-4f0c-9594-d39115523ee2",
+    "name": "公寓（二改版）",
+    "file": "src/legacy/S25.js"
+  },
+  {
+    "key": "S26",
+    "id": "05e4f363-5fe0-476d-8f72-e1ab985966d1",
+    "name": "租客分析系统（二改版）",
+    "file": "src/legacy/S26.js"
+  },
+  {
+    "key": "S27",
+    "id": "264fb4d5-bdd2-4951-8cbe-bf39c5f61e10",
+    "name": "聊天系统（二改版）",
+    "file": "src/legacy/S27.js"
+  },
+  {
+    "key": "S28",
+    "id": "71706ea3-820a-42ca-bc37-1e0b95c40e3b",
+    "name": "音乐（二改版）",
+    "file": "src/legacy/S28.js"
+  },
+  {
+    "key": "S29",
+    "id": "3a9f291b-b218-4cf1-a75e-605604eed606",
+    "name": "报社系统（二改版）",
+    "file": "src/legacy/S29.js"
+  }
+]

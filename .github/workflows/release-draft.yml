@@ -1,0 +1,35 @@
+name: Prepare release draft
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag, for example v5.21.0
+        required: true
+        type: string
+permissions:
+  contents: write
+jobs:
+  draft:
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ inputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: node -e "const p=require('./package.json');if(!/^v\d+\.\d+\.\d+(-rc\.\d+)?$/.test(process.env.RELEASE_TAG)||process.env.RELEASE_TAG!=='v'+p.version)process.exit(1)"
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run check
+      - run: git diff --exit-code -- dist exports
+      - run: node tools/release/draft.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}

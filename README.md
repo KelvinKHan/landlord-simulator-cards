@@ -1,64 +1,51 @@
 # 房东模拟器角色卡
 
-《房东模拟器》SillyTavern 角色卡的维护仓库。
+《房东模拟器》的 SillyTavern 维护仓库。作者拥有原卡及本仓库。
 
-当前阶段：已建立工作区，并完成 Z5.20 世界书、正则、脚本配合关系的静态梳理。
-当前重点是理解项目，尚未开始业务修复；作者已取消大富翁开发方向，原始导出中的相关内容保留作基准。
-初始公开提交包含两份原始卡、文档和校验工具。
-克隆本仓库即可在 `originals/` 获取 Z5.20 原始 JSON 和 PNG。
+当前候选版：**5.21.0-rc.1**。已实现单一酒馆助手入口、原版/二改版选择、按正式 Release 更新脚本与官方世界书，以及启动、异步写入和重绘的时序修复。原始 Z5.20 卡保持不变；大富翁不进入新版运行模块。
 
-## 目录
+## 导入与游玩
+
+1. 下载 [新版 PNG](exports/房东模拟器Z5.21.0-rc.1.png) 或 [新版 JSON](exports/房东模拟器Z5.21.0-rc.1.json)，任选一种导入 SillyTavern。
+2. 安装并启用酒馆助手；允许本卡脚本、正则，并导入内置世界书。实际验证版本为 SillyTavern 1.18.0、酒馆助手 4.9.5。
+3. 酒馆助手的角色脚本列表中只有 **房东模拟器 · 单入口**。在游戏右下角选择原版或二改版。
+4. 选择开场后正常游玩。两版保留各自手机记录；切换会关闭当前应用窗口，现有正文记忆不会被清空。
+
+在旧卡上单独替换脚本时，使用 [单入口脚本文件](exports/房东模拟器-单入口脚本.json)，并停用旧卡原有的整组脚本；不要让两组同时运行。原始卡仍可从 [originals](originals/) 取回。
+
+入口代码：
+
+```js
+import 'https://cdn.jsdelivr.net/gh/KelvinKHan/landlord-simulator-cards@v5.21.0-rc.1/dist/bootstrap.js';
+```
+
+入口启动时查询 GitHub **正式 Release**。开发分支提交和候选版不会自动推送给正式版玩家；本入口在尚无正式版时使用自身候选版。详细行为见 [运行与更新说明](docs/runtime-and-updates.md)。
+
+## 文件组织
 
 | 目录 | 用途 |
 | --- | --- |
-| `originals/` | 原始 JSON 和 PNG，作为不可覆盖的基准备份 |
-| `src/` | 后续整理的角色设定、世界书、脚本、正则与界面源码 |
-| `exports/` | 后续可导入 SillyTavern 的成品卡 |
-| `docs/` | 参考资料、环境记录和基准文件清单 |
-| `tools/` | 原卡校验、只读提取及离线接口核验工具 |
+| `originals/` | 原始 JSON / PNG，字节不变的基准备份 |
+| `src/legacy/` | 保留原玩法的内部模块及针对性修复 |
+| `src/runtime/` | 依赖顺序、资源清理、聊天归属、写入与重绘协调 |
+| `src/updater/` | 正式版发现、完整性检查、缓存、世界书合并和失败恢复 |
+| `src/content/` | 世界书、正则与不可变的 Z5.20 更新基线 |
+| `dist/` | CDN 分发的入口、运行包、内容包和版本清单 |
+| `exports/` | 可以导入的 JSON / PNG 和单入口脚本 |
+| `tests/` | 自动测试；所有模型请求使用隔离样例 |
+| `docs/` | 项目理解、修复范围、验收与发布说明 |
 
-## 配合关系梳理
-
-[先读项目整体理解](docs/analysis/project-model.md)：从玩法、人物记忆和一次操作如何完成理解项目。
-
-[分析总览](docs/analysis/README.md)提供 16 个世界书、9 条正则和 30 个脚本的逐项依据，包含数据流、招募与入住流程、手机记忆同步及原版/二改版差异。
-
-本次分析保留原始 JSON/PNG 和全部启停设置，未修订卡内业务逻辑。作者已确认本仓库的公开维护范围。
-
-## 已检查的基准
-
-- 名称：房东模拟器Z5.20；格式标识：`chara_card_v3` / `3.0`。
-- 世界书 16 条；酒馆助手脚本 30 个（启用 23 个、停用 7 个）；正则规则 9 条；备用开场白 2 条。
-- PNG 尺寸 512 × 768，内含 `chara` 与 `ccv3` 两份角色卡数据。
-- 两份 PNG 内嵌数据均与独立 JSON 完全相同。
-- `xiaobaix-tasks` 扩展存在，任务列表为空；酒馆助手变量字典为空。
-
-上述结果来自静态文件解析。SillyTavern 内的导入、脚本执行、MVU 更新和界面渲染尚未联调。
-
-## 校验
-
-需要 Python 3.9 或更高版本，不需要安装第三方依赖。
-在仓库目录运行：
+## 验证与发布
 
 ```sh
-python3 tools/validate_card.py --baseline
+npm ci
+npx playwright install chromium
+npm run check
+npm run test:integration
 ```
 
-这会检查 JSON 结构、PNG 数据块校验和、两种格式内容一致性，以及文件是否仍与初次导入时完全一致。
+前一项检查包含构建、逻辑测试、Chromium 联调与原卡基准校验；后一项自动安装固定版本的隔离 SillyTavern 和酒馆助手，使用新建的临时测试数据，不读取个人酒馆或调用付费 API。
 
-将来核对其他成对导出文件时：
+[测试记录](docs/testing/README.md) · [修复范围及仍待处理的问题](docs/timing-fixes.md) · [发布步骤](docs/releases.md)
 
-```sh
-python3 tools/validate_card.py path/to/card.json path/to/card.png
-```
-
-工具支持本次 SillyTavern 导出所使用的 PNG `tEXt` / Base64 角色卡元数据；不执行其中的 JavaScript。
-
-只读提取全部组件：`python3 tools/inspect_card.py`。
-JavaScript 语法和接口样例核验另需本地分析依赖，安装与运行步骤见 [核验记录](docs/analysis/verification.md)。
-
-## 开发参考
-
-详见 [参考资料](docs/references.md) 和 [环境记录](docs/setup.md)。
-后续开发前先确定正在使用的 SillyTavern、酒馆助手及 MVU 版本，再按实际依赖配置运行环境。
-当前没有安装、启动或修改 SillyTavern，也没有进行框架升级。
+旧版的 [整体理解](docs/analysis/project-model.md) 和 [逐组件分析](docs/analysis/README.md) 继续保留，描述的是 Z5.20 基准；新版修复状态以以上文档为准。

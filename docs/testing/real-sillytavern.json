@@ -1,0 +1,21 @@
+{
+  "date": "2026-09-07T05:42:54.063Z",
+  "sillytavern": {
+    "version": "1.18.0",
+    "commit": "8172dcd0ee672d3cd9a5e5f7af134f91a45cd2b8"
+  },
+  "tavernHelper": {
+    "version": "4.9.5",
+    "commit": "8e0f4324e7d051025a333831411f03bd3145fac8"
+  },
+  "checks": [
+    "single imported script, original 20 modules, real MVU initialized",
+    "in-game mode button switches to remix with 7 modules",
+    "real swipe updates MVU and restarts modules",
+    "workshop opening uses real MVU parse and replace APIs",
+    "no runtime/page errors, no paid API requests, one helper script remains"
+  ],
+  "paidApiCalls": 0,
+  "version": "5.21.0-rc.1",
+  "result": "passed"
+}

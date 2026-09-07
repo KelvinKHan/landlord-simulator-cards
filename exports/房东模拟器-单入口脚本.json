@@ -1,0 +1,42 @@
+{
+  "type": "script",
+  "enabled": true,
+  "name": "房东模拟器 · 单入口",
+  "id": "6ae4aaa1-fa4b-4687-8c0f-380cf7675905",
+  "content": "import 'https://cdn.jsdelivr.net/gh/KelvinKHan/landlord-simulator-cards@v5.21.0-rc.1/dist/bootstrap.js';",
+  "info": "启动时检查正式发布版本；原版与二改版在游戏内选择。更新前备份官方世界书，保留玩家自定义修改。",
+  "button": {
+    "enabled": true,
+    "buttons": [
+      {
+        "name": "重新处理变量",
+        "visible": true
+      },
+      {
+        "name": "重新读取初始变量",
+        "visible": true
+      },
+      {
+        "name": "快照楼层",
+        "visible": false
+      },
+      {
+        "name": "重演楼层",
+        "visible": false
+      },
+      {
+        "name": "重试额外模型解析",
+        "visible": false
+      },
+      {
+        "name": "清除旧楼层变量",
+        "visible": false
+      }
+    ]
+  },
+  "data": {},
+  "export_with": {
+    "data": true,
+    "button": true
+  }
+}

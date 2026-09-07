@@ -10,6 +10,11 @@ node_modules/
 *.log
 .local/
 
-# 后续确定导出和发布流程后再选择纳入版本控制的文件。
+# 仅跟踪可发布的导出格式。
 /exports/*
 !/exports/README.md
+!/exports/*.json
+!/exports/*.png
+!/exports/*.js
+test-results/
+playwright-report/
