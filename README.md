@@ -2,7 +2,7 @@
 
 《房东模拟器》SillyTavern 角色卡的维护仓库。
 
-当前阶段：建立工作区、保存 Z5.20 原始导出、登记开发参考资料并验证文件完整性。
+当前阶段：已建立工作区，并完成 Z5.20 世界书、正则、脚本配合关系的静态梳理。
 初始公开提交包含两份原始卡、文档和校验工具。
 克隆本仓库即可在 `originals/` 获取 Z5.20 原始 JSON 和 PNG。
 
@@ -14,7 +14,13 @@
 | `src/` | 后续整理的角色设定、世界书、脚本、正则与界面源码 |
 | `exports/` | 后续可导入 SillyTavern 的成品卡 |
 | `docs/` | 参考资料、环境记录和基准文件清单 |
-| `tools/` | 文件校验工具，仅使用 Python 标准库 |
+| `tools/` | 原卡校验、只读提取及离线接口核验工具 |
+
+## 配合关系梳理
+
+[从分析总览开始](docs/analysis/README.md)：逐项覆盖 16 个世界书、9 条正则和 30 个脚本，包含数据流、招募与入住流程、手机记忆同步、原版/二改版差异、问题证据及运行验收方案。
+
+本次分析保留原始 JSON/PNG 和全部启停设置，未修订卡内业务逻辑。作者已确认本仓库的公开维护范围。
 
 ## 已检查的基准
 
@@ -44,6 +50,9 @@ python3 tools/validate_card.py path/to/card.json path/to/card.png
 ```
 
 工具支持本次 SillyTavern 导出所使用的 PNG `tEXt` / Base64 角色卡元数据；不执行其中的 JavaScript。
+
+只读提取全部组件：`python3 tools/inspect_card.py`。
+JavaScript 语法和接口样例核验另需本地分析依赖，安装与运行步骤见 [核验记录](docs/analysis/verification.md)。
 
 ## 开发参考
 

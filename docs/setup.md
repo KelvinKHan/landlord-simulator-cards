@@ -46,4 +46,11 @@ Git 提交署名在本仓库内设置为 GitHub 用户名和对应的 noreply �
 3. 打开 GitHub 仓库，确认公开状态及目录、说明和工具可见。
 
 静态校验不证明插件运行兼容。尚未安装或启动 SillyTavern，尚未进行卡片导入、界面和脚本联调。
-下一步先盘点世界书和脚本之间的关系、卡内远程依赖以及实际插件版本，再确定开发与回写方案。
+后续已完成静态盘点，见 [配合关系梳理](analysis/README.md)。
+
+## 同日后续：静态分析环境
+
+新增只读提取工具 `tools/inspect_card.py` 和离线核验工具 `tools/audit_contracts.cjs`。
+为解析 JavaScript 以及核实 Zod 对象重建行为，在被 Git 忽略的 `.local/analysis-tools/` 安装了 `@babel/parser@7.28.5`、`zod@4.1.11`。
+Node/npm 已用于这一轮分析；上表“未使用”和“新增依赖无”描述的是初次建仓阶段。
+详细命令、证据和未完成的真实运行验证记录在 [verification.md](analysis/verification.md)。

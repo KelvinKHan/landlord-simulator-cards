@@ -1,0 +1,232 @@
+{
+  "checked_on": "2026-09-07",
+  "note": "Reference snapshots, not installed runtime versions; downloaded as text only.",
+  "sources": [
+    {
+      "repo": "SillyTavern/SillyTavern",
+      "commit": "8172dcd0ee672d3cd9a5e5f7af134f91a45cd2b8",
+      "path": "public/script.js",
+      "url": "https://github.com/SillyTavern/SillyTavern/blob/8172dcd0ee672d3cd9a5e5f7af134f91a45cd2b8/public/script.js",
+      "bytes": 494994,
+      "sha256": "606762e1e36805a12429708defcafac7287a3df78393813bf460c53524a27403"
+    },
+    {
+      "repo": "SillyTavern/SillyTavern",
+      "commit": "8172dcd0ee672d3cd9a5e5f7af134f91a45cd2b8",
+      "path": "public/scripts/extensions/regex/engine.js",
+      "url": "https://github.com/SillyTavern/SillyTavern/blob/8172dcd0ee672d3cd9a5e5f7af134f91a45cd2b8/public/scripts/extensions/regex/engine.js",
+      "bytes": 16189,
+      "sha256": "091bb3402a12552cf1754d6e4d2b44df38d3553aa374539896c716e78905d350"
+    },
+    {
+      "repo": "SillyTavern/SillyTavern",
+      "commit": "8172dcd0ee672d3cd9a5e5f7af134f91a45cd2b8",
+      "path": "public/scripts/utils.js",
+      "url": "https://github.com/SillyTavern/SillyTavern/blob/8172dcd0ee672d3cd9a5e5f7af134f91a45cd2b8/public/scripts/utils.js",
+      "bytes": 112276,
+      "sha256": "7236069f0d6c95b0d959e3c574bc7acbd4dc088459371abf38a6a7a77a076067"
+    },
+    {
+      "repo": "SillyTavern/SillyTavern",
+      "commit": "8172dcd0ee672d3cd9a5e5f7af134f91a45cd2b8",
+      "path": "public/scripts/world-info.js",
+      "url": "https://github.com/SillyTavern/SillyTavern/blob/8172dcd0ee672d3cd9a5e5f7af134f91a45cd2b8/public/scripts/world-info.js",
+      "bytes": 259580,
+      "sha256": "e273b778269866d32b04eb4b378b3480556818e608af549282f55b2e9c544d38"
+    },
+    {
+      "repo": "N0VI028/JS-Slash-Runner",
+      "commit": "8e0f4324e7d051025a333831411f03bd3145fac8",
+      "path": "@types/function/variables.d.ts",
+      "url": "https://github.com/N0VI028/JS-Slash-Runner/blob/8e0f4324e7d051025a333831411f03bd3145fac8/@types/function/variables.d.ts",
+      "bytes": 7404,
+      "sha256": "45bc282ef55a070edcd6d659313f609fe38dae0650897c2fcf9243b00041ce1b"
+    },
+    {
+      "repo": "N0VI028/JS-Slash-Runner",
+      "commit": "8e0f4324e7d051025a333831411f03bd3145fac8",
+      "path": "@types/function/worldbook.d.ts",
+      "url": "https://github.com/N0VI028/JS-Slash-Runner/blob/8e0f4324e7d051025a333831411f03bd3145fac8/@types/function/worldbook.d.ts",
+      "bytes": 12019,
+      "sha256": "ec7c2b0f935b114c47f19c57505f9ccef213e25fc4917e61ba7f39290065c81a"
+    },
+    {
+      "repo": "N0VI028/JS-Slash-Runner",
+      "commit": "8e0f4324e7d051025a333831411f03bd3145fac8",
+      "path": "@types/iframe/event.d.ts",
+      "url": "https://github.com/N0VI028/JS-Slash-Runner/blob/8e0f4324e7d051025a333831411f03bd3145fac8/@types/iframe/event.d.ts",
+      "bytes": 21491,
+      "sha256": "c2f53dfb276489f191a0fb1ffd9ccea402f48967c9a3ca832711ef7a7fd45343"
+    },
+    {
+      "repo": "N0VI028/JS-Slash-Runner",
+      "commit": "8e0f4324e7d051025a333831411f03bd3145fac8",
+      "path": "@types/iframe/exported.mvu.d.ts",
+      "url": "https://github.com/N0VI028/JS-Slash-Runner/blob/8e0f4324e7d051025a333831411f03bd3145fac8/@types/iframe/exported.mvu.d.ts",
+      "bytes": 8024,
+      "sha256": "f59b8af4782ebd813be11bd1040d4d37f14241ff79bed5b09b9b7aa5c141728d"
+    },
+    {
+      "repo": "N0VI028/JS-Slash-Runner",
+      "commit": "8e0f4324e7d051025a333831411f03bd3145fac8",
+      "path": "@types/iframe/exported.sillytavern.d.ts",
+      "url": "https://github.com/N0VI028/JS-Slash-Runner/blob/8e0f4324e7d051025a333831411f03bd3145fac8/@types/iframe/exported.sillytavern.d.ts",
+      "bytes": 26567,
+      "sha256": "eae4ed517b5ff493afca4581e191b212020088ad12577d699297efd0eb5ab0bb"
+    },
+    {
+      "repo": "N0VI028/JS-Slash-Runner",
+      "commit": "8e0f4324e7d051025a333831411f03bd3145fac8",
+      "path": "src/function/macro_like.ts",
+      "url": "https://github.com/N0VI028/JS-Slash-Runner/blob/8e0f4324e7d051025a333831411f03bd3145fac8/src/function/macro_like.ts",
+      "bytes": 3341,
+      "sha256": "89fcb67e73b6a39c26e5518b8c2cedcf5aec35247434f9ac897698805d784b7a"
+    },
+    {
+      "repo": "N0VI028/JS-Slash-Runner",
+      "commit": "8e0f4324e7d051025a333831411f03bd3145fac8",
+      "path": "src/function/variables.ts",
+      "url": "https://github.com/N0VI028/JS-Slash-Runner/blob/8e0f4324e7d051025a333831411f03bd3145fac8/src/function/variables.ts",
+      "bytes": 10283,
+      "sha256": "49b161facd0c83917b29bdc97e189e33ee35a16643eac56a6cb8489dd8421f45"
+    },
+    {
+      "repo": "N0VI028/JS-Slash-Runner",
+      "commit": "8e0f4324e7d051025a333831411f03bd3145fac8",
+      "path": "src/function/worldbook.ts",
+      "url": "https://github.com/N0VI028/JS-Slash-Runner/blob/8e0f4324e7d051025a333831411f03bd3145fac8/src/function/worldbook.ts",
+      "bytes": 14912,
+      "sha256": "1860ad65613949c099bbf4a182b888c33a8150305ff3b6071f81f15bb4071d94"
+    },
+    {
+      "repo": "N0VI028/JS-Slash-Runner",
+      "commit": "8e0f4324e7d051025a333831411f03bd3145fac8",
+      "path": "src/iframe/predefine.js",
+      "url": "https://github.com/N0VI028/JS-Slash-Runner/blob/8e0f4324e7d051025a333831411f03bd3145fac8/src/iframe/predefine.js",
+      "bytes": 1852,
+      "sha256": "5a75bdd4e1d8b8e3c0a8626a26f7d1635a103837904792b3833e8fc26ec9b323"
+    },
+    {
+      "repo": "N0VI028/JS-Slash-Runner",
+      "commit": "8e0f4324e7d051025a333831411f03bd3145fac8",
+      "path": "src/iframe/script_url.ts",
+      "url": "https://github.com/N0VI028/JS-Slash-Runner/blob/8e0f4324e7d051025a333831411f03bd3145fac8/src/iframe/script_url.ts",
+      "bytes": 895,
+      "sha256": "a24e59ab7cbcc088a8e270ace35a5dc4181eca6328abafc0a82b7ff46a0b89d2"
+    },
+    {
+      "repo": "N0VI028/JS-Slash-Runner",
+      "commit": "8e0f4324e7d051025a333831411f03bd3145fac8",
+      "path": "src/iframe/third_party_script.html",
+      "url": "https://github.com/N0VI028/JS-Slash-Runner/blob/8e0f4324e7d051025a333831411f03bd3145fac8/src/iframe/third_party_script.html",
+      "bytes": 204,
+      "sha256": "b3f5a0ef770e94c0aefb76c6925cf16a282bb5d1040abfcb767b21b0570ac23e"
+    },
+    {
+      "repo": "N0VI028/JS-Slash-Runner",
+      "commit": "8e0f4324e7d051025a333831411f03bd3145fac8",
+      "path": "src/macro.ts",
+      "url": "https://github.com/N0VI028/JS-Slash-Runner/blob/8e0f4324e7d051025a333831411f03bd3145fac8/src/macro.ts",
+      "bytes": 366,
+      "sha256": "1af83042526c47c2e9680af52acfae6d5c992ddd23d30a23d6d445ae53477d9a"
+    },
+    {
+      "repo": "N0VI028/JS-Slash-Runner",
+      "commit": "8e0f4324e7d051025a333831411f03bd3145fac8",
+      "path": "src/panel/render/macro_like.ts",
+      "url": "https://github.com/N0VI028/JS-Slash-Runner/blob/8e0f4324e7d051025a333831411f03bd3145fac8/src/panel/render/macro_like.ts",
+      "bytes": 4047,
+      "sha256": "1a410441b3307462f2c3b43cd242413ab57409514d929d7be4620fc238f6cbbb"
+    },
+    {
+      "repo": "N0VI028/JS-Slash-Runner",
+      "commit": "8e0f4324e7d051025a333831411f03bd3145fac8",
+      "path": "src/panel/script/iframe.ts",
+      "url": "https://github.com/N0VI028/JS-Slash-Runner/blob/8e0f4324e7d051025a333831411f03bd3145fac8/src/panel/script/iframe.ts",
+      "bytes": 906,
+      "sha256": "0b9a619ee7ffe7dcbe9561083fdddcea43fe3c0c4f9d07e7fea8d5fbe1b04ebb"
+    },
+    {
+      "repo": "N0VI028/JS-Slash-Runner",
+      "commit": "8e0f4324e7d051025a333831411f03bd3145fac8",
+      "path": "src/store/iframe_runtimes/script.ts",
+      "url": "https://github.com/N0VI028/JS-Slash-Runner/blob/8e0f4324e7d051025a333831411f03bd3145fac8/src/store/iframe_runtimes/script.ts",
+      "bytes": 2624,
+      "sha256": "9aed213f592ac245375f6dde39c777b3b7b3b80f5804de7fdaeb6818f50b4626"
+    },
+    {
+      "repo": "MagicalAstrogy/MagVarUpdate",
+      "commit": "61010dab47bc3a08a1b626320bf7fc8c9573eca4",
+      "path": "package.json",
+      "url": "https://github.com/MagicalAstrogy/MagVarUpdate/blob/61010dab47bc3a08a1b626320bf7fc8c9573eca4/package.json",
+      "bytes": 3718,
+      "sha256": "07e2ed199ee5a6e33dc64e424ffd8905f53114c366a3b14ee194400c5e9b29f1"
+    },
+    {
+      "repo": "MagicalAstrogy/MagVarUpdate",
+      "commit": "61010dab47bc3a08a1b626320bf7fc8c9573eca4",
+      "path": "src/function/exported_events.ts",
+      "url": "https://github.com/MagicalAstrogy/MagVarUpdate/blob/61010dab47bc3a08a1b626320bf7fc8c9573eca4/src/function/exported_events.ts",
+      "bytes": 993,
+      "sha256": "b7fa2a2a92643b894476c5ca8153a1a1178185fa505511a7b0a62f2c86023d9f"
+    },
+    {
+      "repo": "MagicalAstrogy/MagVarUpdate",
+      "commit": "61010dab47bc3a08a1b626320bf7fc8c9573eca4",
+      "path": "src/function/initvar/variable_init.ts",
+      "url": "https://github.com/MagicalAstrogy/MagVarUpdate/blob/61010dab47bc3a08a1b626320bf7fc8c9573eca4/src/function/initvar/variable_init.ts",
+      "bytes": 15882,
+      "sha256": "d2b730788fc74723f9df29ebd02085cd142e1f7289c3b25fb85cbebab51470bf"
+    },
+    {
+      "repo": "MagicalAstrogy/MagVarUpdate",
+      "commit": "61010dab47bc3a08a1b626320bf7fc8c9573eca4",
+      "path": "src/function/schema.ts",
+      "url": "https://github.com/MagicalAstrogy/MagVarUpdate/blob/61010dab47bc3a08a1b626320bf7fc8c9573eca4/src/function/schema.ts",
+      "bytes": 12755,
+      "sha256": "e4b17f6f3f682fdc0e6f996706fbe39eb75875471215dd1ea48e56f422d1ae84"
+    },
+    {
+      "repo": "MagicalAstrogy/MagVarUpdate",
+      "commit": "61010dab47bc3a08a1b626320bf7fc8c9573eca4",
+      "path": "src/function/update/on_message_received.ts",
+      "url": "https://github.com/MagicalAstrogy/MagVarUpdate/blob/61010dab47bc3a08a1b626320bf7fc8c9573eca4/src/function/update/on_message_received.ts",
+      "bytes": 2389,
+      "sha256": "d2f0eb6d2b6f31aaccd7b4a9e89f30912d4ecc185752d96f0ab98c78e6f8ecb5"
+    },
+    {
+      "repo": "MagicalAstrogy/MagVarUpdate",
+      "commit": "61010dab47bc3a08a1b626320bf7fc8c9573eca4",
+      "path": "src/function/update_variables.ts",
+      "url": "https://github.com/MagicalAstrogy/MagVarUpdate/blob/61010dab47bc3a08a1b626320bf7fc8c9573eca4/src/function/update_variables.ts",
+      "bytes": 68767,
+      "sha256": "fdcb2d26b047c21eb7bff7432a57fe2f1b9ab8fa77db17e06fed54596520383a"
+    },
+    {
+      "repo": "MagicalAstrogy/MagVarUpdate",
+      "commit": "61010dab47bc3a08a1b626320bf7fc8c9573eca4",
+      "path": "src/variable_def.ts",
+      "url": "https://github.com/MagicalAstrogy/MagVarUpdate/blob/61010dab47bc3a08a1b626320bf7fc8c9573eca4/src/variable_def.ts",
+      "bytes": 10415,
+      "sha256": "8ba03ce3d02a2b21ff5af214f01823bbec88e6f2cc33cf831c34a53ecbf3b21e"
+    },
+    {
+      "repo": "StageDog/tavern_resource",
+      "commit": "dee97e8c3e24e1e75efe21141743e4b5c0af776e",
+      "path": "util/mvu_zod.ts",
+      "url": "https://github.com/StageDog/tavern_resource/blob/dee97e8c3e24e1e75efe21141743e4b5c0af776e/util/mvu_zod.ts",
+      "bytes": 10478,
+      "sha256": "7bfc6befba039a907b576d4d04472be4cb374ef9e23a2821635b5bf70a4f27f9"
+    },
+    {
+      "url": "https://testingcf.jsdelivr.net/gh/StageDog/tavern_resource/dist/util/mvu_zod.js",
+      "bytes": 4705,
+      "sha256": "78c40f52d81022d9d769a923a49e673b8babb562656051a7d0410b6b19f45184"
+    },
+    {
+      "url": "https://testingcf.jsdelivr.net/gh/MagicalAstrogy/MagVarUpdate/artifact/bundle.js",
+      "bytes": 307765,
+      "sha256": "be149c7fb531c9f8755bde722931b3389ac8470218248fec12440d2b2a9b9c89"
+    }
+  ]
+}

@@ -1,0 +1,456 @@
+{
+  "scope": "Offline syntax and bounded contract probes; no card scripts executed",
+  "versions": {
+    "node": "v24.14.0",
+    "babel": "7.28.5",
+    "zod": "4.1.11"
+  },
+  "syntax": [
+    {
+      "name": "S00",
+      "ok": true
+    },
+    {
+      "name": "S01",
+      "ok": true
+    },
+    {
+      "name": "S02",
+      "ok": true
+    },
+    {
+      "name": "S03",
+      "ok": true
+    },
+    {
+      "name": "S04",
+      "ok": true
+    },
+    {
+      "name": "S05",
+      "ok": true
+    },
+    {
+      "name": "S06",
+      "ok": true
+    },
+    {
+      "name": "S07",
+      "ok": true
+    },
+    {
+      "name": "S08",
+      "ok": true
+    },
+    {
+      "name": "S09",
+      "ok": true
+    },
+    {
+      "name": "S10",
+      "ok": true
+    },
+    {
+      "name": "S11",
+      "ok": true
+    },
+    {
+      "name": "S12",
+      "ok": true
+    },
+    {
+      "name": "S13",
+      "ok": true
+    },
+    {
+      "name": "S14",
+      "ok": true
+    },
+    {
+      "name": "S15",
+      "ok": true
+    },
+    {
+      "name": "S16",
+      "ok": true
+    },
+    {
+      "name": "S17",
+      "ok": true
+    },
+    {
+      "name": "S18",
+      "ok": true
+    },
+    {
+      "name": "S19",
+      "ok": true
+    },
+    {
+      "name": "S20",
+      "ok": true
+    },
+    {
+      "name": "S21",
+      "ok": true
+    },
+    {
+      "name": "S22",
+      "ok": true
+    },
+    {
+      "name": "S23",
+      "ok": true
+    },
+    {
+      "name": "S24",
+      "ok": true
+    },
+    {
+      "name": "S25",
+      "ok": true
+    },
+    {
+      "name": "S26",
+      "ok": true
+    },
+    {
+      "name": "S27",
+      "ok": true
+    },
+    {
+      "name": "S28",
+      "ok": true
+    },
+    {
+      "name": "S29",
+      "ok": true
+    },
+    {
+      "name": "R03.script0",
+      "ok": true
+    },
+    {
+      "name": "R04.script0",
+      "ok": true
+    },
+    {
+      "name": "R05.script0",
+      "ok": true
+    },
+    {
+      "name": "S06.generatedIframe.script0",
+      "ok": true
+    }
+  ],
+  "probes": [
+    {
+      "name": "all_regex_compile",
+      "count": 9,
+      "flags": [
+        "",
+        "gis",
+        "gis",
+        "",
+        "g",
+        "",
+        "g",
+        "",
+        ""
+      ]
+    },
+    {
+      "name": "R00_dual_direction_flags",
+      "display": true,
+      "prompt": true
+    },
+    {
+      "name": "R02_multiple_updates",
+      "input": "two update blocks separated by prose",
+      "actual": "前后",
+      "losesInterveningProse": true
+    },
+    {
+      "name": "R00_non_global",
+      "remainingPlaceholdersAfterTwo": 1
+    },
+    {
+      "name": "R03_candidate_field_contract",
+      "ascii": true,
+      "chineseColon": false,
+      "noSpace": false
+    },
+    {
+      "name": "W13_travel_keywords",
+      "cityMapTriggers": false,
+      "worldMapSoloTriggers": true,
+      "worldMapPartyTriggers": true
+    },
+    {
+      "name": "preset__builtin_original",
+      "enabledIndices": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        23,
+        24
+      ],
+      "changesFromExport": [
+        {
+          "index": 22,
+          "enabled": false
+        },
+        {
+          "index": 24,
+          "enabled": true
+        }
+      ],
+      "regexRuleCount": 0
+    },
+    {
+      "name": "preset__builtin_fancreation",
+      "enabledIndices": [
+        0,
+        1,
+        2,
+        3,
+        23,
+        24,
+        25,
+        26,
+        27,
+        28,
+        29
+      ],
+      "changesFromExport": [
+        {
+          "index": 4,
+          "enabled": false
+        },
+        {
+          "index": 6,
+          "enabled": false
+        },
+        {
+          "index": 7,
+          "enabled": false
+        },
+        {
+          "index": 8,
+          "enabled": false
+        },
+        {
+          "index": 9,
+          "enabled": false
+        },
+        {
+          "index": 10,
+          "enabled": false
+        },
+        {
+          "index": 11,
+          "enabled": false
+        },
+        {
+          "index": 12,
+          "enabled": false
+        },
+        {
+          "index": 13,
+          "enabled": false
+        },
+        {
+          "index": 14,
+          "enabled": false
+        },
+        {
+          "index": 15,
+          "enabled": false
+        },
+        {
+          "index": 16,
+          "enabled": false
+        },
+        {
+          "index": 17,
+          "enabled": false
+        },
+        {
+          "index": 18,
+          "enabled": false
+        },
+        {
+          "index": 19,
+          "enabled": false
+        },
+        {
+          "index": 20,
+          "enabled": false
+        },
+        {
+          "index": 21,
+          "enabled": false
+        },
+        {
+          "index": 22,
+          "enabled": false
+        },
+        {
+          "index": 24,
+          "enabled": true
+        },
+        {
+          "index": 25,
+          "enabled": true
+        },
+        {
+          "index": 26,
+          "enabled": true
+        },
+        {
+          "index": 27,
+          "enabled": true
+        },
+        {
+          "index": 28,
+          "enabled": true
+        },
+        {
+          "index": 29,
+          "enabled": true
+        }
+      ],
+      "regexRuleCount": 0
+    },
+    {
+      "name": "S25_missing_initCentralState",
+      "called": true,
+      "definedOnAssignedObject": false,
+      "allCardOccurrences": 1
+    },
+    {
+      "name": "S23_unused_worldview_autoinjection",
+      "identifierOccurrences": 1
+    },
+    {
+      "name": "zod_top_object_reconstruction",
+      "originalRefinementRejects": true,
+      "reconstructedObjectAccepts": true,
+      "unknownTopLevelPreserved": true,
+      "unknownNestedStripped": true
+    },
+    {
+      "name": "restored_cross_field_check_needs_transaction",
+      "tenantOnly": false,
+      "roomOnly": false,
+      "bothTogether": true
+    },
+    {
+      "name": "weather_fantasy_year",
+      "numeric": false
+    },
+    {
+      "name": "S26_default_context_tag",
+      "untaggedNarrativeMatches": false,
+      "taggedNarrativeMatches": true
+    },
+    {
+      "name": "greeting_patch_inventory",
+      "greetings": [
+        {
+          "index": 0,
+          "count": 4,
+          "operations": [
+            "replace"
+          ],
+          "paths": [
+            "/世界/年份",
+            "/世界/日期",
+            "/世界/星期",
+            "/世界/时间"
+          ]
+        },
+        {
+          "index": 1,
+          "count": 23,
+          "operations": [
+            "replace",
+            "add"
+          ],
+          "paths": [
+            "/世界/年份",
+            "/世界/日期",
+            "/世界/星期",
+            "/世界/时间",
+            "/公寓/楼层列表/-",
+            "/公寓/房间列表/二楼卧室A",
+            "/公寓/房间列表/二楼画室",
+            "/公寓/房间列表/三楼卧室A",
+            "/公寓/房间列表/三楼卧室B",
+            "/公寓/房间列表/三楼空房间",
+            "/公寓/房间列表/四楼私人影院",
+            "/公寓/房间列表/四楼书房",
+            "/公寓/房间列表/地下健身房",
+            "/租客列表/林晓雨",
+            "/租客列表/艾琳娜·沃尔科娃",
+            "/租客列表/苏墨",
+            "/租客列表/陈星星",
+            "/租客列表/王浩然",
+            "/租客列表/谢芳菲",
+            "/用户/资金",
+            "/用户/物品栏/圣诞礼物盒",
+            "/用户/物品栏/高级红酒",
+            "/用户/物品栏/急救药箱"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "greeting_duplicate_floor",
+      "initialFloors": [
+        "四楼",
+        "三楼",
+        "二楼",
+        "一楼",
+        "地下一楼"
+      ],
+      "appendedFloors": [
+        "地下一楼"
+      ],
+      "duplicates": [
+        "地下一楼"
+      ]
+    },
+    {
+      "name": "component_identity",
+      "counts": {
+        "worldbook": 16,
+        "regex": 9,
+        "scripts": 30
+      },
+      "uniqueIds": true
+    },
+    {
+      "name": "ejs_delimiters_in_export",
+      "count": 0
+    }
+  ]
+}
