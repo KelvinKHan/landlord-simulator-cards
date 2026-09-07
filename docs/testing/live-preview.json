@@ -1,0 +1,33 @@
+{
+  "checkedAt": "2026-09-07T07:57:10.466494+00:00",
+  "url": "http://127.0.0.1:8776/",
+  "tag": "v5.21.0-rc.5",
+  "environment": "作者正在使用的真实酒馆预览，使用公开 jsDelivr 单入口",
+  "checks": {
+    "publicCdnEntryLoaded": true,
+    "dragDoesNotOpenPanel": true,
+    "clickAfterDragOpensPanel": true,
+    "followLatestOptionVisible": true,
+    "positionRestoredAfterPageReload": true
+  },
+  "externalLimitation": {
+    "releaseCatalogHttpStatus": 403,
+    "cause": "GitHub 匿名 API 小时请求额度已用完（响应头 remaining=0），当前候选版和悬浮球已正常加载。",
+    "impact": "暂时无法获取公开版本列表及检查最新正式版；继续使用已验证的当前版本。"
+  },
+  "paidModelCalls": 0,
+  "dragVerification": {
+    "beforeReloadCenter": {
+      "x": 40,
+      "y": 200
+    },
+    "afterReloadCenter": {
+      "x": 40,
+      "y": 200
+    },
+    "viewport": {
+      "width": 633,
+      "height": 696
+    }
+  }
+}
