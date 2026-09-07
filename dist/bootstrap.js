@@ -166,7 +166,7 @@ async function updateContent({ api, store, content, baseline, identity, isCurren
 
 // src/updater/release.js
 var REPO = "KelvinKHan/landlord-simulator-cards";
-var FALLBACK_TAG = `v${"5.21.0-rc.4"}`;
+var FALLBACK_TAG = `v${"5.21.0-rc.5"}`;
 async function sha256(text) {
   const bytes = typeof text === "string" ? new TextEncoder().encode(text) : text;
   const hash = await crypto.subtle.digest("SHA-256", bytes);
@@ -262,14 +262,200 @@ function mountViewportPanel(host, panel, zIndex) {
   const doc = host.document;
   const id = `${panel.id}-viewport`;
   doc.getElementById(id)?.remove();
+  let overlay = doc.getElementById("landlord-controls-overlay");
+  if (!overlay) {
+    overlay = doc.createElement("div");
+    overlay.id = "landlord-controls-overlay";
+    const hasPopover = typeof overlay.showPopover === "function";
+    const position = !hasPopover && host.getComputedStyle(doc.body).position === "fixed" ? "absolute" : "fixed";
+    overlay.style.cssText = `position:${position};inset:auto;top:0;left:0;margin:0;padding:0;border:0;box-sizing:border-box;width:100vw;height:100vh;height:100dvh;max-width:none;max-height:none;overflow:clip;background:transparent;color:inherit;pointer-events:none;z-index:100002;`;
+    const style = doc.createElement("style");
+    style.textContent = "#landlord-controls-overlay::backdrop{pointer-events:none!important;background:transparent!important}";
+    overlay.append(style);
+    if (hasPopover) overlay.setAttribute("popover", "manual");
+    doc.body.append(overlay);
+    if (hasPopover) overlay.showPopover();
+  }
   const layer = doc.createElement("div");
   layer.id = id;
-  layer.style.cssText = `position:fixed;top:0;left:0;width:100%;height:100vh;height:100dvh;pointer-events:none;z-index:${zIndex};`;
+  layer.setAttribute("data-landlord-panel-layer", "");
+  layer.style.cssText = `position:absolute;inset:0;pointer-events:none;z-index:${zIndex};`;
   panel.style.position = "absolute";
   panel.style.pointerEvents = "auto";
   layer.append(panel);
-  doc.body.append(layer);
-  return () => layer.remove();
+  overlay.append(layer);
+  return () => {
+    layer.remove();
+    if (!overlay.querySelector("[data-landlord-panel-layer]")) {
+      if (typeof overlay.hidePopover === "function" && overlay.matches(":popover-open")) overlay.hidePopover();
+      overlay.remove();
+    }
+  };
+}
+
+// src/updater/floating.js
+var STORAGE_KEY = "landlord:version-controls:position";
+var SIZE = 56;
+var GAP = 10;
+var MARGIN = 8;
+var clamp = (value, min, max) => Math.max(min, Math.min(value, Math.max(min, max)));
+function makeVersionFloating({ host, panel, handle, body }) {
+  const listeners = [];
+  let disposed = false, frame = null, drag = null, suppressClick = false;
+  function bounds() {
+    const viewport = host.visualViewport;
+    const left = viewport?.offsetLeft || 0, top = viewport?.offsetTop || 0;
+    return {
+      left: left + MARGIN,
+      top: top + MARGIN,
+      right: left + (viewport?.width || host.innerWidth) - MARGIN,
+      bottom: top + (viewport?.height || host.innerHeight) - MARGIN
+    };
+  }
+  const initial = bounds();
+  let position = { x: initial.left + 4, y: Math.max(initial.top, initial.bottom - SIZE - 86) };
+  try {
+    const saved = JSON.parse(host.localStorage.getItem(STORAGE_KEY));
+    if (Number.isFinite(saved?.x) && Number.isFinite(saved?.y)) position = { x: saved.x, y: saved.y };
+  } catch {
+  }
+  function save() {
+    try {
+      host.localStorage.setItem(STORAGE_KEY, JSON.stringify(position));
+    } catch {
+    }
+  }
+  function layout() {
+    if (disposed) return;
+    const viewport = bounds();
+    position.x = clamp(position.x, viewport.left, viewport.right - SIZE);
+    position.y = clamp(position.y, viewport.top, viewport.bottom - SIZE);
+    panel.style.left = `${position.x}px`;
+    panel.style.top = `${position.y}px`;
+    panel.style.bottom = panel.style.right = "auto";
+    if (!panel.open) return;
+    const width = Math.min(340, viewport.right - viewport.left);
+    body.style.width = `${width}px`;
+    let x, y;
+    if (position.x + SIZE + GAP + width <= viewport.right || position.x - GAP - width >= viewport.left) {
+      body.style.maxHeight = `${viewport.bottom - viewport.top}px`;
+      const height = body.getBoundingClientRect().height;
+      x = position.x + SIZE + GAP + width <= viewport.right ? position.x + SIZE + GAP : position.x - GAP - width;
+      y = clamp(position.y, viewport.top, viewport.bottom - height);
+    } else {
+      const above = position.y - GAP - viewport.top;
+      const below = viewport.bottom - position.y - SIZE - GAP;
+      const useAbove = above >= below;
+      body.style.maxHeight = `${Math.max(1, useAbove ? above : below)}px`;
+      const height = body.getBoundingClientRect().height;
+      x = clamp(position.x, viewport.left, viewport.right - width);
+      y = useAbove ? position.y - GAP - height : position.y + SIZE + GAP;
+    }
+    body.style.left = `${x - position.x}px`;
+    body.style.top = `${y - position.y}px`;
+  }
+  function schedule() {
+    if (disposed || frame !== null) return;
+    frame = host.requestAnimationFrame(() => {
+      frame = null;
+      layout();
+    });
+  }
+  function listen(target, type, handler, options) {
+    target.addEventListener(type, handler, options);
+    listeners.push(() => target.removeEventListener(type, handler, options));
+  }
+  function start(event) {
+    if (event.button !== 0 || event.isPrimary === false) return;
+    suppressClick = false;
+    drag = { id: event.pointerId, x: event.clientX, y: event.clientY, start: { ...position }, moved: false };
+    try {
+      handle.setPointerCapture(event.pointerId);
+    } catch {
+    }
+  }
+  function move(event) {
+    if (!drag || event.pointerId !== drag.id) return;
+    const dx = event.clientX - drag.x, dy = event.clientY - drag.y;
+    if (!drag.moved && Math.hypot(dx, dy) < 5) return;
+    drag.moved = true;
+    event.preventDefault();
+    position = { x: drag.start.x + dx, y: drag.start.y + dy };
+    panel.classList.add("is-dragging");
+    layout();
+  }
+  function end(event) {
+    if (!drag || event.pointerId !== drag.id) return;
+    suppressClick = drag.moved;
+    if (drag.moved) {
+      event.preventDefault();
+      save();
+    }
+    drag = null;
+    panel.classList.remove("is-dragging");
+    try {
+      handle.releasePointerCapture(event.pointerId);
+    } catch {
+    }
+  }
+  function cancel(event) {
+    if (!drag || event.pointerId !== drag.id) return;
+    drag = null;
+    suppressClick = true;
+    panel.classList.remove("is-dragging");
+    try {
+      handle.releasePointerCapture(event.pointerId);
+    } catch {
+    }
+  }
+  listen(handle, "pointerdown", start);
+  listen(host.document, "pointermove", move, { passive: false });
+  listen(host.document, "pointerup", end);
+  listen(host.document, "pointercancel", cancel);
+  listen(handle, "lostpointercapture", cancel);
+  listen(handle, "click", (event) => {
+    if (suppressClick && event.detail !== 0) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }
+    suppressClick = false;
+  }, true);
+  listen(panel, "toggle", () => {
+    handle.setAttribute("aria-expanded", String(panel.open));
+    layout();
+  });
+  listen(panel, "keydown", (event) => {
+    if (event.key === "Escape" && panel.open && event.target.tagName !== "SELECT") {
+      panel.open = false;
+      handle.focus();
+      event.preventDefault();
+    }
+  });
+  listen(host, "resize", schedule);
+  if (host.visualViewport) {
+    listen(host.visualViewport, "resize", schedule);
+    listen(host.visualViewport, "scroll", schedule);
+  }
+  const observer = new host.ResizeObserver(schedule);
+  observer.observe(body);
+  handle.setAttribute("aria-expanded", String(panel.open));
+  layout();
+  return {
+    layout: schedule,
+    dispose() {
+      disposed = true;
+      if (drag) {
+        try {
+          handle.releasePointerCapture(drag.id);
+        } catch {
+        }
+      }
+      drag = null;
+      listeners.splice(0).forEach((remove) => remove());
+      observer.disconnect();
+      if (frame !== null) host.cancelAnimationFrame(frame);
+    }
+  };
 }
 
 // src/updater/controls.js
@@ -282,13 +468,28 @@ function mountVersionControls({ host, getState, refresh, apply }) {
   panel.id = "landlord-version-controls";
   const style = doc.createElement("style");
   style.textContent = `
-    #landlord-version-controls { position:fixed; bottom:12px; left:12px; z-index:100002;
-      box-sizing:border-box; max-width:min(340px,calc(100vw - 24px)); padding:10px 12px;
-      border:1px solid #77677e; border-radius:12px; background:#272331; color:#fff;
-      font:14px/1.5 sans-serif; box-shadow:0 3px 18px #0005; overflow-wrap:anywhere;
-      max-height:calc(100dvh - 24px); overflow-y:auto; }
-    #landlord-version-controls summary { cursor:pointer; }
-    #landlord-version-controls .landlord-version-body { width:310px; max-width:100%; }
+    #landlord-version-controls { position:absolute; z-index:100002; width:56px; height:56px;
+      box-sizing:border-box; margin:0; padding:0; border:0; background:none; overflow:visible;
+      color:#fff; font:14px/1.5 sans-serif; overflow-wrap:anywhere; }
+    #landlord-version-controls > summary { display:flex; position:relative; flex-direction:column;
+      align-items:center; justify-content:center; gap:1px; box-sizing:border-box;
+      width:56px; height:56px; padding:0; margin:0; list-style:none; border:1px solid #cbb1ec;
+      border-radius:50%; background:linear-gradient(145deg,#8968b1,#544169); color:#fff;
+      box-shadow:0 4px 16px #0006; cursor:grab; touch-action:none; user-select:none; }
+    #landlord-version-controls > summary::-webkit-details-marker { display:none; }
+    #landlord-version-controls > summary::before { content:''; width:23px; height:23px;
+      background:center/contain no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 7v5h-5M4 17v-5h5M6.1 6.1A8 8 0 0 1 20 12M4 12a8 8 0 0 0 13.9 5.9'/%3E%3C/svg%3E"); }
+    #landlord-version-controls > summary::after { content:'\u7248\u672C'; font:10px/1.2 sans-serif; }
+    #landlord-version-controls[open] > summary::after { content:'\u6536\u8D77'; }
+    #landlord-version-controls > summary:focus-visible { outline:3px solid #e6c8ff; outline-offset:3px; }
+    #landlord-version-controls.is-dragging > summary { cursor:grabbing; }
+    #landlord-version-controls .landlord-version-label { position:absolute; width:1px; height:1px;
+      padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+    #landlord-version-controls .landlord-version-body { position:absolute; box-sizing:border-box;
+      width:340px; padding:12px 14px; overflow-y:auto; overscroll-behavior:contain;
+      border:1px solid #897294; border-radius:14px; background:#272331;
+      box-shadow:0 4px 20px #0006; }
+    #landlord-version-controls .landlord-version-heading { font-weight:600; }
     #landlord-version-controls p { margin:10px 0; }
     #landlord-version-controls label { display:block; margin-bottom:5px; }
     #landlord-version-controls select { display:block; box-sizing:border-box; width:100%;
@@ -301,11 +502,16 @@ function mountVersionControls({ host, getState, refresh, apply }) {
     #landlord-version-controls button:disabled, #landlord-version-controls select:disabled { opacity:.6; cursor:wait; }
     #landlord-version-controls [role=alert] { color:#ffb8b8; }
     #landlord-version-controls [hidden] { display:none; }
-    @media(max-width:640px) { #landlord-version-controls { bottom:70px; max-height:calc(100dvh - 82px); } }
   `;
   const summary = doc.createElement("summary");
+  summary.setAttribute("aria-label", "\u7248\u672C\u4E0E\u66F4\u65B0");
+  const summaryText = doc.createElement("span");
+  summaryText.className = "landlord-version-label";
+  summary.append(summaryText);
   const body = doc.createElement("div");
   body.className = "landlord-version-body";
+  const heading = doc.createElement("div");
+  heading.className = "landlord-version-heading";
   const description = doc.createElement("p");
   description.textContent = "\u8FD9\u91CC\u9009\u62E9\u529F\u80FD\u53D1\u5E03\u7248\u672C\u3002\u539F\u7248\u4E0E\u4E8C\u6539\u7248\u4ECD\u5728\u6E38\u620F\u6A21\u5F0F\u4E2D\u53E6\u884C\u9009\u62E9\u3002";
   const label = doc.createElement("label");
@@ -331,9 +537,10 @@ function mountVersionControls({ host, getState, refresh, apply }) {
   const error = doc.createElement("p");
   error.setAttribute("role", "alert");
   actions.append(refreshButton, applyButton);
-  body.append(description, label, select, warning, actions, status, error);
+  body.append(heading, description, label, select, warning, actions, status, error);
   panel.append(style, summary, body);
   const removePanel = mountViewportPanel(host, panel, 100002);
+  const floating = makeVersionFloating({ host, panel, handle: summary, body });
   let disposed = false, pending = "", localError = "", lastPreference = null, draft = "latest", autoRefreshStarted = false;
   let observedBusy = false, busyTimer;
   function render() {
@@ -366,7 +573,9 @@ function mountVersionControls({ host, getState, refresh, apply }) {
       }
     }
     select.value = draft;
-    summary.textContent = `\u7248\u672C\u4E0E\u66F4\u65B0 \xB7 ${state.currentTag || "\u6B63\u5728\u542F\u52A8"}`;
+    summaryText.textContent = `\u7248\u672C\u4E0E\u66F4\u65B0 \xB7 ${state.currentTag || "\u6B63\u5728\u542F\u52A8"}`;
+    summary.title = `${summaryText.textContent}\uFF08\u62D6\u52A8\u8C03\u6574\u4F4D\u7F6E\uFF0C\u70B9\u51FB\u5C55\u5F00\uFF09`;
+    heading.textContent = summaryText.textContent;
     observedBusy = Boolean(state.busy);
     const busy = Boolean(pending || observedBusy);
     panel.setAttribute("aria-busy", String(busy));
@@ -375,6 +584,7 @@ function mountVersionControls({ host, getState, refresh, apply }) {
     status.hidden = !status.textContent;
     error.textContent = localError || state.error || "";
     error.hidden = !error.textContent;
+    floating.layout();
     if (panel.open && !autoRefreshStarted && !busy) {
       autoRefreshStarted = true;
       void request("\u6B63\u5728\u5237\u65B0\u7248\u672C\u5217\u8868\u2026", refresh);
@@ -421,6 +631,7 @@ function mountVersionControls({ host, getState, refresh, apply }) {
       panel.removeEventListener("toggle", render);
       refreshButton.removeEventListener("click", onRefresh);
       applyButton.removeEventListener("click", onApply);
+      floating.dispose();
       removePanel();
       if (host[INSTANCE] === controls) delete host[INSTANCE];
     }

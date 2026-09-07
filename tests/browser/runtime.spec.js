@@ -106,9 +106,11 @@ test('repeated mode switches do not accumulate message listeners or UI roots',as
   const result=await page.evaluate(async()=>{
     const before=eventSource.count('message_received');
     for(let i=0;i<3;i++){await runtime.setMode('remix');await runtime.setMode('original')}
-    return{before,after:eventSource.count('message_received'),controls:document.querySelectorAll('#landlord-controls').length,errors:runtime.errors};
+    return{before,after:eventSource.count('message_received'),controls:document.querySelectorAll('#landlord-controls').length,overlays:document.querySelectorAll('#landlord-controls-overlay').length,errors:runtime.errors};
   });
-  expect(result.after).toBe(result.before);expect(result.controls).toBe(1);expect(result.errors).toEqual([]);
+  expect(result.after).toBe(result.before);expect(result.controls).toBe(1);expect(result.overlays).toBe(1);expect(result.errors).toEqual([]);
+  await page.evaluate(()=>runtime.dispose());
+  await expect(page.locator('#landlord-controls-overlay')).toHaveCount(0);
 });
 
 test('saving a message commits the conversation preview and rejects a deleted conversation',async({page})=>{

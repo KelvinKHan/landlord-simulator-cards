@@ -1,4 +1,5 @@
 import { mountViewportPanel } from '../runtime/viewport-panel.js';
+import { makeVersionFloating } from './floating.js';
 
 const INSTANCE = Symbol.for('landlord.version-controls');
 
@@ -11,13 +12,28 @@ export function mountVersionControls({ host, getState, refresh, apply }) {
   panel.id = 'landlord-version-controls';
   const style = doc.createElement('style');
   style.textContent = `
-    #landlord-version-controls { position:fixed; bottom:12px; left:12px; z-index:100002;
-      box-sizing:border-box; max-width:min(340px,calc(100vw - 24px)); padding:10px 12px;
-      border:1px solid #77677e; border-radius:12px; background:#272331; color:#fff;
-      font:14px/1.5 sans-serif; box-shadow:0 3px 18px #0005; overflow-wrap:anywhere;
-      max-height:calc(100dvh - 24px); overflow-y:auto; }
-    #landlord-version-controls summary { cursor:pointer; }
-    #landlord-version-controls .landlord-version-body { width:310px; max-width:100%; }
+    #landlord-version-controls { position:absolute; z-index:100002; width:56px; height:56px;
+      box-sizing:border-box; margin:0; padding:0; border:0; background:none; overflow:visible;
+      color:#fff; font:14px/1.5 sans-serif; overflow-wrap:anywhere; }
+    #landlord-version-controls > summary { display:flex; position:relative; flex-direction:column;
+      align-items:center; justify-content:center; gap:1px; box-sizing:border-box;
+      width:56px; height:56px; padding:0; margin:0; list-style:none; border:1px solid #cbb1ec;
+      border-radius:50%; background:linear-gradient(145deg,#8968b1,#544169); color:#fff;
+      box-shadow:0 4px 16px #0006; cursor:grab; touch-action:none; user-select:none; }
+    #landlord-version-controls > summary::-webkit-details-marker { display:none; }
+    #landlord-version-controls > summary::before { content:''; width:23px; height:23px;
+      background:center/contain no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 7v5h-5M4 17v-5h5M6.1 6.1A8 8 0 0 1 20 12M4 12a8 8 0 0 0 13.9 5.9'/%3E%3C/svg%3E"); }
+    #landlord-version-controls > summary::after { content:'版本'; font:10px/1.2 sans-serif; }
+    #landlord-version-controls[open] > summary::after { content:'收起'; }
+    #landlord-version-controls > summary:focus-visible { outline:3px solid #e6c8ff; outline-offset:3px; }
+    #landlord-version-controls.is-dragging > summary { cursor:grabbing; }
+    #landlord-version-controls .landlord-version-label { position:absolute; width:1px; height:1px;
+      padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+    #landlord-version-controls .landlord-version-body { position:absolute; box-sizing:border-box;
+      width:340px; padding:12px 14px; overflow-y:auto; overscroll-behavior:contain;
+      border:1px solid #897294; border-radius:14px; background:#272331;
+      box-shadow:0 4px 20px #0006; }
+    #landlord-version-controls .landlord-version-heading { font-weight:600; }
     #landlord-version-controls p { margin:10px 0; }
     #landlord-version-controls label { display:block; margin-bottom:5px; }
     #landlord-version-controls select { display:block; box-sizing:border-box; width:100%;
@@ -30,10 +46,13 @@ export function mountVersionControls({ host, getState, refresh, apply }) {
     #landlord-version-controls button:disabled, #landlord-version-controls select:disabled { opacity:.6; cursor:wait; }
     #landlord-version-controls [role=alert] { color:#ffb8b8; }
     #landlord-version-controls [hidden] { display:none; }
-    @media(max-width:640px) { #landlord-version-controls { bottom:70px; max-height:calc(100dvh - 82px); } }
   `;
   const summary = doc.createElement('summary');
+  summary.setAttribute('aria-label', '版本与更新');
+  const summaryText = doc.createElement('span'); summaryText.className = 'landlord-version-label';
+  summary.append(summaryText);
   const body = doc.createElement('div'); body.className = 'landlord-version-body';
+  const heading = doc.createElement('div'); heading.className = 'landlord-version-heading';
   const description = doc.createElement('p');
   description.textContent = '这里选择功能发布版本。原版与二改版仍在游戏模式中另行选择。';
   const label = doc.createElement('label');
@@ -50,9 +69,10 @@ export function mountVersionControls({ host, getState, refresh, apply }) {
   const status = doc.createElement('p'); status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite');
   const error = doc.createElement('p'); error.setAttribute('role', 'alert');
   actions.append(refreshButton, applyButton);
-  body.append(description, label, select, warning, actions, status, error);
+  body.append(heading, description, label, select, warning, actions, status, error);
   panel.append(style, summary, body);
   const removePanel = mountViewportPanel(host, panel, 100002);
+  const floating = makeVersionFloating({host, panel, handle:summary, body});
 
   let disposed = false, pending = '', localError = '', lastPreference = null, draft = 'latest', autoRefreshStarted = false;
   let observedBusy = false, busyTimer;
@@ -80,7 +100,9 @@ export function mountVersionControls({ host, getState, refresh, apply }) {
       }
     }
     select.value = draft;
-    summary.textContent = `版本与更新 · ${state.currentTag || '正在启动'}`;
+    summaryText.textContent = `版本与更新 · ${state.currentTag || '正在启动'}`;
+    summary.title = `${summaryText.textContent}（拖动调整位置，点击展开）`;
+    heading.textContent = summaryText.textContent;
     observedBusy = Boolean(state.busy);
     const busy = Boolean(pending || observedBusy);
     panel.setAttribute('aria-busy', String(busy));
@@ -89,6 +111,7 @@ export function mountVersionControls({ host, getState, refresh, apply }) {
     status.hidden = !status.textContent;
     error.textContent = localError || state.error || '';
     error.hidden = !error.textContent;
+    floating.layout();
     if (panel.open && !autoRefreshStarted && !busy) {
       autoRefreshStarted = true;
       void request('正在刷新版本列表…', refresh);
@@ -124,6 +147,7 @@ export function mountVersionControls({ host, getState, refresh, apply }) {
       panel.removeEventListener('toggle', render);
       refreshButton.removeEventListener('click', onRefresh);
       applyButton.removeEventListener('click', onApply);
+      floating.dispose();
       removePanel();
       if (host[INSTANCE] === controls) delete host[INSTANCE];
     },

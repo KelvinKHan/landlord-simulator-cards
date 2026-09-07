@@ -49,7 +49,7 @@ async function waitForOwnServer(){
   assertOwnServer();
 }
 let browser;
-const report={date:new Date().toISOString(),sillytavern:{version:'1.18.0',commit:ST},tavernHelper:{version:'4.9.5',commit:TH},isolation:{port,ownProcessStartupVerified:false},checks:[],paidApiCalls:0,blockedIconifyRequests:0};
+const report={date:new Date().toISOString(),sillytavern:{version:'1.18.0',commit:ST},tavernHelper:{version:'4.9.5',commit:TH},isolation:{port,ownProcessStartupVerified:false},checks:[],paidApiCalls:0,blockedIconifyRequests:0,stubbedReleaseCatalogRequests:0};
 try{
   await waitForOwnServer();report.isolation.ownProcessStartupVerified=true;
   report.checks.push('fresh data root and an available loopback port; only our child process announces readiness before any HTTP request');
@@ -62,7 +62,7 @@ try{
   const imported=await context.request.post(origin+'/api/characters/import',{headers:{'X-CSRF-Token':token},multipart:{avatar:{name:'landlord.json',mimeType:'application/json',buffer:card},file_type:'json'}});
   assert.equal(imported.status(),200);
   await page.route('https://api.github.com/repos/KelvinKHan/landlord-simulator-cards/releases/latest',r=>r.fulfill({status:404,headers:{'Access-Control-Allow-Origin':'*'},body:'{}'}));
-  await page.route('https://api.github.com/repos/KelvinKHan/landlord-simulator-cards/releases?per_page=100',r=>r.fulfill({status:200,headers:{'Access-Control-Allow-Origin':'*'},contentType:'application/json',body:'[]'}));
+  await page.route(/^https:\/\/api\.github\.com\/repos\/KelvinKHan\/landlord-simulator-cards\/releases\?per_page=100(?:&page=\d+)?$/,r=>{report.stubbedReleaseCatalogRequests++;return r.fulfill({status:200,headers:{'Access-Control-Allow-Origin':'*'},contentType:'application/json',body:'[]'})});
   await page.route('https://api.iconify.design/**',r=>{report.blockedIconifyRequests++;return r.abort()});
   await page.route('https://cdn.jsdelivr.net/gh/KelvinKHan/landlord-simulator-cards@*/dist/*',async r=>{const file=r.request().url().split('/').at(-1);await r.fulfill({headers:{'Access-Control-Allow-Origin':'*'},contentType:file.endsWith('.json')?'application/json':'application/javascript',body:await fs.readFile(path.join(root,'dist',file))})});
   await page.route(/\/chat\/completions|\/api\/backends\/.*\/generate|\/api\/generate$/,r=>{report.paidApiCalls++;return r.abort()});
@@ -91,7 +91,8 @@ try{
   assert.notEqual(await page.locator('html').evaluate(el=>getComputedStyle(el).transform),'none','real SillyTavern must exercise its transformed root');
   async function assertInViewport(locator,label){
     const rect=await locator.boundingBox();assert.ok(rect,`${label} must render`);
-    assert.ok(rect.width>0&&rect.height>0&&rect.x>=0&&rect.y>=0&&rect.x+rect.width<=633&&rect.y+rect.height<=696,`${label} must fit the narrow viewport: ${JSON.stringify(rect)}`);
+    const viewport=page.viewportSize();
+    assert.ok(rect.width>0&&rect.height>0&&rect.x>=0&&rect.y>=0&&rect.x+rect.width<=viewport.width&&rect.y+rect.height<=viewport.height,`${label} must fit the narrow viewport: ${JSON.stringify(rect)}`);
     await locator.click({trial:true});
   }
   for(const id of ['landlord-version-controls','landlord-controls']){
@@ -102,13 +103,34 @@ try{
       const choice=page.getByRole('combobox',{name:'更新方式与版本',exact:true});
       assert.equal(await choice.inputValue(),'latest');
       assert.ok(await choice.isVisible(),'automatic release tracking must be visibly selectable');
+      await assertInViewport(page.locator('#landlord-version-controls .landlord-version-body'),'version popover');
+      await page.waitForFunction(()=>document.getElementById('landlord-version-controls')?.getAttribute('aria-busy')==='false');
+      assert.equal(await page.locator('#landlord-version-controls [role="alert"]').isVisible(),false,'the isolated release catalog refresh must complete without an external GitHub error');
     }
     await summary.click();
   }
+  const versionPanel=page.locator('#landlord-version-controls');
+  const versionBall=versionPanel.locator('summary');
+  const ballBeforeDrag=await versionBall.boundingBox();
+  assert.ok(Math.abs(ballBeforeDrag.width-ballBeforeDrag.height)<=1,'the collapsed version entry must be a round floating ball');
+  assert.ok(ballBeforeDrag.width>=44&&ballBeforeDrag.width<=80,'the floating ball must be a usable compact touch target');
+  const start={x:ballBeforeDrag.x+ballBeforeDrag.width/2,y:ballBeforeDrag.y+ballBeforeDrag.height/2};
+  const target={x:Math.min(480,start.x+180),y:Math.max(100,start.y-150)};
+  await page.mouse.move(start.x,start.y);await page.mouse.down();
+  await page.mouse.move(target.x,target.y,{steps:12});await page.mouse.up();
+  assert.equal(await versionPanel.evaluate(el=>el.open),false,'dragging must not toggle the version popover');
+  const savedBallPosition=await versionBall.boundingBox();
+  assert.ok(Math.hypot(savedBallPosition.x-ballBeforeDrag.x,savedBallPosition.y-ballBeforeDrag.y)>100,'the version ball must move with the pointer');
+  await assertInViewport(versionBall,'dragged version ball');
+  await versionBall.click();
+  await assertInViewport(versionPanel.locator('.landlord-version-body'),'dragged version popover');
+  assert.ok(await page.getByRole('combobox',{name:'更新方式与版本',exact:true}).isVisible(),'a tap after dragging must still open version choices');
+  await page.screenshot({path:path.join(root,'.local/real-sillytavern-version-fab.png'),animations:'disabled'});
+  await versionBall.click();
   await page.locator('#send_textarea').fill('预览输入仍可操作');
   assert.equal(await page.locator('#send_textarea').inputValue(),'预览输入仍可操作');
   await page.locator('#send_textarea').fill('');
-  report.checks.push('version and mode controls are visible, fully within 633×696 and clickable under the real transformed html; latest-release choice and chat input are accessible');
+  report.checks.push('version floating ball and mode controls fit 633×696 under the real transformed html; dragging moves the ball without opening it, a later tap opens a fully visible version popover, and chat input remains accessible');
 
   const menu=page.getByRole('button',{name:'房东模拟器功能菜单',exact:true});
   await assertInViewport(menu,'floating menu');await menu.click();
@@ -121,7 +143,7 @@ try{
   assert.ok(await apartmentButton.locator('img').evaluate(img=>img.complete&&img.naturalWidth>0),'apartment icon must decode even with Iconify blocked');
   await apartmentButton.click();await page.locator('#apartment-main-panel.active').waitFor({state:'visible'});
   assert.ok(await page.locator('#apartment-main-panel .dock-button-icon').first().isVisible(),'apartment action icons must render');
-  await page.screenshot({path:path.join(root,'.local/real-sillytavern-narrow.png')});
+  await page.screenshot({path:path.join(root,'.local/real-sillytavern-narrow.png'),animations:'disabled'});
   await page.locator('#apartment-main-panel .control-dot.red[title="关闭"]').click();
   report.checks.push('Iconify is blocked; every floating menu image decodes from bundled SVG and the apartment icon opens the real apartment with visible action icons');
 
@@ -171,11 +193,16 @@ try{
     assert.equal(current.updater.currentTag,tag);
     assert.equal(current.mode,'remix');assert.equal(current.scopes,7);
     assert.equal(current.scripts,1);assert.equal(current.frames,1);
+    const restoredBall=page.locator('#landlord-version-controls summary');
+    await assertInViewport(restoredBall,'restored version ball');
+    await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(resolve)));
+    const restoredPosition=await restoredBall.boundingBox();
+    assert.ok(Math.abs(restoredPosition.x-savedBallPosition.x)<=1&&Math.abs(restoredPosition.y-savedBallPosition.y)<=1,`the dragged position must survive the helper reload: ${JSON.stringify({saved:savedBallPosition,restored:restoredPosition})}`);
   }
   await saveVersionChoice('pinned');
   report.checks.push('in-card version selector pins the current release via official helper iframe reload, preserving the open chat, remix mode and one script');
   await saveVersionChoice('latest');
-  report.checks.push('in-card version selector restores automatic formal-release tracking via helper iframe reload without host navigation');
+  report.checks.push('in-card version selector restores automatic formal-release tracking via helper iframe reload without host navigation; the dragged ball position survives both helper reloads');
   await page.evaluate(async()=>{const {swipe_right}=await import('/script.js');await swipe_right()});
   await page.waitForFunction(()=>LandlordRuntime.running && SillyTavern.getContext().chat[0].swipe_id===1 && LandlordRuntime.readState().世界?.年份==='2025年');
   report.checks.push('real swipe updates MVU and restarts modules');
@@ -198,9 +225,11 @@ try{
 
   const end=await page.evaluate(()=>({errors:LandlordRuntime.errors,scripts:document.querySelectorAll('iframe[id^="TH-script"]').length,books:TavernHelper.getWorldbookNames()}));
   assert.deepEqual(end.errors,[]);assert.equal(end.scripts,1);assert.deepEqual(errors,[]);assert.equal(report.paidApiCalls,0);
+  assert.ok(report.stubbedReleaseCatalogRequests>0,'the paginated release catalog must be intercepted by the isolated fixture');
+  report.checks.push('the paginated release catalog is isolated from GitHub and opening the version popover refreshes without a download error');
   report.checks.push('no runtime/page errors, no paid API requests, one helper script remains');
   report.version=pkg.version;report.result='passed';
-  await page.screenshot({path:path.join(root,'.local/real-sillytavern.png')});
+  await page.screenshot({path:path.join(root,'.local/real-sillytavern.png'),animations:'disabled'});
   await fs.mkdir(path.join(root,'docs/testing'),{recursive:true});
   await fs.writeFile(path.join(root,'docs/testing/real-sillytavern.json'),JSON.stringify(report,null,2)+'\n');
   console.log(JSON.stringify(report,null,2));

@@ -25575,18 +25575,39 @@ function mountViewportPanel(host, panel, zIndex) {
   const doc = host.document;
   const id = `${panel.id}-viewport`;
   doc.getElementById(id)?.remove();
+  let overlay = doc.getElementById("landlord-controls-overlay");
+  if (!overlay) {
+    overlay = doc.createElement("div");
+    overlay.id = "landlord-controls-overlay";
+    const hasPopover = typeof overlay.showPopover === "function";
+    const position = !hasPopover && host.getComputedStyle(doc.body).position === "fixed" ? "absolute" : "fixed";
+    overlay.style.cssText = `position:${position};inset:auto;top:0;left:0;margin:0;padding:0;border:0;box-sizing:border-box;width:100vw;height:100vh;height:100dvh;max-width:none;max-height:none;overflow:clip;background:transparent;color:inherit;pointer-events:none;z-index:100002;`;
+    const style = doc.createElement("style");
+    style.textContent = "#landlord-controls-overlay::backdrop{pointer-events:none!important;background:transparent!important}";
+    overlay.append(style);
+    if (hasPopover) overlay.setAttribute("popover", "manual");
+    doc.body.append(overlay);
+    if (hasPopover) overlay.showPopover();
+  }
   const layer = doc.createElement("div");
   layer.id = id;
-  layer.style.cssText = `position:fixed;top:0;left:0;width:100%;height:100vh;height:100dvh;pointer-events:none;z-index:${zIndex};`;
+  layer.setAttribute("data-landlord-panel-layer", "");
+  layer.style.cssText = `position:absolute;inset:0;pointer-events:none;z-index:${zIndex};`;
   panel.style.position = "absolute";
   panel.style.pointerEvents = "auto";
   layer.append(panel);
-  doc.body.append(layer);
-  return () => layer.remove();
+  overlay.append(layer);
+  return () => {
+    layer.remove();
+    if (!overlay.querySelector("[data-landlord-panel-layer]")) {
+      if (typeof overlay.hidePopover === "function" && overlay.matches(":popover-open")) overlay.hidePopover();
+      overlay.remove();
+    }
+  };
 }
 
 // src/runtime/entry.js
-var VERSION = "5.21.0-rc.4";
+var VERSION = "5.21.0-rc.5";
 var ORDERS = {
   original: ["S02", "S04", "S07", "S08", "S06", "S09", "S10", "S11", "S12", "S13", "S14", "S15", "S16", "S17", "S18", "S19", "S20", "S21", "S22", "S23"],
   remix: ["S02", "S25", "S26", "S27", "S28", "S29", "S23"]
