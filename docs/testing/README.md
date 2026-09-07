@@ -1,6 +1,6 @@
 # 测试与验收
 
-当前候选版 `5.21.0-rc.2` 的 `npm run check`：19 项逻辑/导出测试、18 项 Chromium 联调全部通过，另通过原卡基准校验。真实酒馆集成结果见下方版本记录。
+当前候选版 `5.21.0-rc.2` 的 `npm run check`：19 项逻辑/导出测试、18 项 Chromium 联调全部通过，另通过原卡基准校验。真实酒馆集成也通过，并确认新聊天、内置世界书和工坊开场没有生成已取消玩法的状态。
 
 自动检查使用 Node.js 24、Python 3 和 Chromium。开发依赖固定在 `package-lock.json`：Babel parser/traverse、esbuild、Playwright、fake-indexeddb、jQuery、lodash、Zod。没有新增玩家需要自行安装的脚本依赖。
 
