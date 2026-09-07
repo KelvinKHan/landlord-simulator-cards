@@ -18,8 +18,7 @@ const WS_TYPES = ['character', 'room', 'world', 'sticker'];
 function wsTypeLabel(type) { return wsIcon({character:'user',room:'home',world:'globe',sticker:'smile'}[type]||'star', 14) + ' ' + {character:'创意角色',room:'创意房间',world:'创意世界',sticker:'表情包'}[type]; }
 function wsTypeIcon(type) { return wsIcon({character:'user',room:'home',world:'globe',sticker:'smile'}[type]||'star', 14); }
 
-// ============ Iconify API 图标系统（与phone脚本相同方式） ============
-const WS_ICON_API = 'https://api.iconify.design/lucide:';
+// ============ 随脚本内置的 SVG 图标系统 ============
 const WS_ICON_MAP = {
     arrowLeft: 'arrow-left', arrowRight: 'arrow-right',
     checkCircle: 'check-circle', xCircle: 'x-circle',
@@ -36,7 +35,7 @@ const WS_ICON_MAP = {
 function wsIcon(name, size) {
     size = size || 16;
     var iconName = WS_ICON_MAP[name] || name;
-    return '<img src="' + WS_ICON_API + iconName + '.svg" width="' + size + '" height="' + size + '" style="display:inline-block;vertical-align:middle;flex-shrink:0;">';
+    return '<img src="' + landlord.iconUrl('lucide:' + iconName) + '" width="' + size + '" height="' + size + '" style="display:inline-block;vertical-align:middle;flex-shrink:0;">';
 }
 
 let wsCurrentTab = 'character';

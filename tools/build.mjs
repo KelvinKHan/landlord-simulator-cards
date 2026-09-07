@@ -5,6 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { parse } from '@babel/parser';
 import traverseImport from '@babel/traverse';
 import { build } from 'esbuild';
+import { inlineIconUrls } from './inline-icons.mjs';
 const traverse = traverseImport.default || traverseImport;
 const root = path.resolve(import.meta.dirname, '..');
 process.chdir(root);
@@ -17,7 +18,7 @@ const globals = new Set(['window','self','globalThis','parent','top','document',
 const excluded = new Set(['undefined','NaN','Infinity','Math','JSON','Object','Array','String','Number','Boolean','Date','RegExp','Promise','Map','Set','WeakMap','WeakSet','Error','TypeError','RangeError','Symbol','BigInt','Intl','Reflect','Proxy','parseInt','parseFloat','isNaN','isFinite','encodeURIComponent','decodeURIComponent','encodeURI','decodeURI','escape','unescape']);
 const imports = [];
 for (const item of components) {
-  const source = await fs.readFile(item.file, 'utf8');
+  const source = inlineIconUrls(await fs.readFile(item.file, 'utf8'));
   const ast = parse(source, { sourceType: 'module' });
   const free = new Set();
   const importNodes = [];

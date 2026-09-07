@@ -1,0 +1,92 @@
+{
+  "repository": "https://github.com/iconify/icon-sets",
+  "commit": "ad784891fdb45ab99c31908c58c759333acb6571",
+  "sets": {
+    "ri": {
+      "name": "Remix Icon",
+      "total": 3188,
+      "version": "4.8.0",
+      "author": {
+        "name": "Remix Design",
+        "url": "https://github.com/cyberalien/RemixIcon"
+      },
+      "license": {
+        "title": "Apache 2.0",
+        "spdx": "Apache-2.0",
+        "url": "https://github.com/cyberalien/RemixIcon/blob/master/License"
+      },
+      "samples": [
+        "lock-2-line",
+        "mark-pen-fill",
+        "moon-line",
+        "filter-2-fill",
+        "text",
+        "add-line"
+      ],
+      "height": 24,
+      "category": "UI 24px",
+      "tags": [
+        "Precise Shapes",
+        "Has Padding"
+      ],
+      "palette": false
+    },
+    "mdi": {
+      "name": "Material Design Icons",
+      "total": 7447,
+      "author": {
+        "name": "Pictogrammers",
+        "url": "https://github.com/Templarian/MaterialDesign"
+      },
+      "license": {
+        "title": "Apache 2.0",
+        "spdx": "Apache-2.0",
+        "url": "https://github.com/Templarian/MaterialDesign/blob/master/LICENSE"
+      },
+      "samples": [
+        "account-check",
+        "bell-alert-outline",
+        "calendar-edit",
+        "skip-previous",
+        "home-variant",
+        "lock-open-outline"
+      ],
+      "height": 24,
+      "category": "Material",
+      "tags": [
+        "Precise Shapes",
+        "Has Padding"
+      ],
+      "palette": false
+    },
+    "lucide": {
+      "name": "Lucide",
+      "total": 1798,
+      "author": {
+        "name": "Lucide Contributors",
+        "url": "https://github.com/lucide-icons/lucide"
+      },
+      "license": {
+        "title": "ISC",
+        "spdx": "ISC",
+        "url": "https://github.com/lucide-icons/lucide/blob/main/LICENSE"
+      },
+      "samples": [
+        "circle-check",
+        "award",
+        "house",
+        "check",
+        "mountain",
+        "chevron-up"
+      ],
+      "height": 24,
+      "category": "UI 24px",
+      "tags": [
+        "Precise Shapes",
+        "Has Padding",
+        "Uses Stroke"
+      ],
+      "palette": false
+    }
+  }
+}

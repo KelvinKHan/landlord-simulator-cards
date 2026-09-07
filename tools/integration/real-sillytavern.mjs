@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import {spawn,execFileSync} from 'node:child_process';
 import assert from 'node:assert/strict';
+import net from 'node:net';
 import {chromium} from '@playwright/test';
 const root=path.resolve(import.meta.dirname,'../..');
 const fixture=path.join(root,'.local/sillytavern-test');
@@ -17,14 +18,41 @@ async function clone(url,dir,ref){
 await clone('https://github.com/SillyTavern/SillyTavern.git',fixture,ST);
 await clone('https://github.com/N0VI028/JS-Slash-Runner.git',plugin,TH);
 try{await fs.access(path.join(fixture,'node_modules/express'))}catch{execFileSync('npm',['ci','--ignore-scripts','--no-audit','--no-fund'],{cwd:fixture,stdio:'inherit'})}
-const port=8776,origin=`http://127.0.0.1:${port}`;
-const data=`data-landlord-${Date.now()}`;
-const server=spawn(process.execPath,['server.js','--port',String(port),'--listen','false','--browserLaunchEnabled','false','--dataRoot',`./${data}`],{cwd:fixture,stdio:'ignore'});
+const requestedPort=Number(process.env.LANDLORD_TEST_PORT ?? 0);
+assert.ok(Number.isInteger(requestedPort)&&requestedPort>=0&&requestedPort<=65535,'LANDLORD_TEST_PORT must be an integer from 0 to 65535');
+// Reserve a free loopback port without ever probing an existing HTTP service.
+// If the released port is claimed before our child binds it, startup fails below.
+const port=await new Promise((resolve,reject)=>{
+  const reservation=net.createServer();
+  reservation.once('error',reject);
+  reservation.listen({host:'127.0.0.1',port:requestedPort},()=>{
+    const assigned=reservation.address().port;
+    reservation.close(error=>error?reject(error):resolve(assigned));
+  });
+});
+const origin=`http://127.0.0.1:${port}`;
+const data=path.basename(await fs.mkdtemp(path.join(fixture,'data-landlord-integration-')));
+const server=spawn(process.execPath,['server.js','--port',String(port),'--listen','false','--browserLaunchEnabled','false','--dataRoot',`./${data}`],{cwd:fixture,stdio:['ignore','pipe','pipe']});
+let serverOutput='';
+function recordServerOutput(chunk){serverOutput=(serverOutput+String(chunk).replace(/\u001b\[[0-9;]*m/g,'')).slice(-16000)}
+server.stdout.on('data',recordServerOutput);server.stderr.on('data',recordServerOutput);
+function assertOwnServer(){assert.equal(server.exitCode,null,'the isolated server must still be running');assert.equal(server.signalCode,null,'the isolated server must not have been terminated')}
+async function waitForOwnServer(){
+  await new Promise((resolve,reject)=>{
+    const timeout=setTimeout(()=>finish(Error(`Isolated server did not announce startup:\n${serverOutput}`)),90000);
+    function finish(error){clearTimeout(timeout);server.stdout.off('data',check);server.off('error',failed);server.off('exit',exited);error?reject(error):resolve()}
+    function check(){if(serverOutput.includes(`SillyTavern is listening on IPv4: 127.0.0.1:${port}`))finish()}
+    function failed(error){finish(error)}
+    function exited(code,signal){finish(Error(`Isolated server exited (${code ?? signal}) before startup:\n${serverOutput}`))}
+    server.stdout.on('data',check);server.once('error',failed);server.once('exit',exited);check();
+  });
+  assertOwnServer();
+}
 let browser;
-const report={date:new Date().toISOString(),sillytavern:{version:'1.18.0',commit:ST},tavernHelper:{version:'4.9.5',commit:TH},checks:[],paidApiCalls:0};
+const report={date:new Date().toISOString(),sillytavern:{version:'1.18.0',commit:ST},tavernHelper:{version:'4.9.5',commit:TH},isolation:{port,ownProcessStartupVerified:false},checks:[],paidApiCalls:0,blockedIconifyRequests:0};
 try{
-  let up=false;for(let i=0;i<120;i++){try{const res=await fetch(origin+'/csrf-token');if(res.ok){up=true;break}}catch{}await new Promise(r=>setTimeout(r,500))}
-  assert.ok(up,'isolated server must start');
+  await waitForOwnServer();report.isolation.ownProcessStartupVerified=true;
+  report.checks.push('fresh data root and an available loopback port; only our child process announces readiness before any HTTP request');
   browser=await chromium.launch({headless:true});const context=await browser.newContext({viewport:{width:1440,height:1000}});const page=await context.newPage();
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   page.on('console',m=>{if(m.type()==='error' && /\[(房东模拟器|正文美化|AptOS|ChatSync|ChatDB)/.test(m.text()))errors.push(m.text())});
@@ -35,6 +63,7 @@ try{
   assert.equal(imported.status(),200);
   await page.route('https://api.github.com/repos/KelvinKHan/landlord-simulator-cards/releases/latest',r=>r.fulfill({status:404,headers:{'Access-Control-Allow-Origin':'*'},body:'{}'}));
   await page.route('https://api.github.com/repos/KelvinKHan/landlord-simulator-cards/releases?per_page=100',r=>r.fulfill({status:200,headers:{'Access-Control-Allow-Origin':'*'},contentType:'application/json',body:'[]'}));
+  await page.route('https://api.iconify.design/**',r=>{report.blockedIconifyRequests++;return r.abort()});
   await page.route('https://cdn.jsdelivr.net/gh/KelvinKHan/landlord-simulator-cards@*/dist/*',async r=>{const file=r.request().url().split('/').at(-1);await r.fulfill({headers:{'Access-Control-Allow-Origin':'*'},contentType:file.endsWith('.json')?'application/json':'application/javascript',body:await fs.readFile(path.join(root,'dist',file))})});
   await page.route(/\/chat\/completions|\/api\/backends\/.*\/generate|\/api\/generate$/,r=>{report.paidApiCalls++;return r.abort()});
   await page.goto(origin);
@@ -57,6 +86,44 @@ try{
   report.checks.push('new chat and live character worldbook contain no retired gameplay state or rules');
   assert.equal(await page.locator('#landlord-version-controls').count(),1);
   assert.equal(await page.evaluate(()=>window.__LandlordUpdater.getState().preference.mode),'latest');
+
+  await page.setViewportSize({width:633,height:696});
+  assert.notEqual(await page.locator('html').evaluate(el=>getComputedStyle(el).transform),'none','real SillyTavern must exercise its transformed root');
+  async function assertInViewport(locator,label){
+    const rect=await locator.boundingBox();assert.ok(rect,`${label} must render`);
+    assert.ok(rect.width>0&&rect.height>0&&rect.x>=0&&rect.y>=0&&rect.x+rect.width<=633&&rect.y+rect.height<=696,`${label} must fit the narrow viewport: ${JSON.stringify(rect)}`);
+    await locator.click({trial:true});
+  }
+  for(const id of ['landlord-version-controls','landlord-controls']){
+    const summary=page.locator(`#${id} summary`);
+    await assertInViewport(summary,id);await summary.click();
+    await assertInViewport(page.locator(`#${id}`),`${id} expanded`);
+    if(id==='landlord-version-controls'){
+      const choice=page.getByRole('combobox',{name:'更新方式与版本',exact:true});
+      assert.equal(await choice.inputValue(),'latest');
+      assert.ok(await choice.isVisible(),'automatic release tracking must be visibly selectable');
+    }
+    await summary.click();
+  }
+  await page.locator('#send_textarea').fill('预览输入仍可操作');
+  assert.equal(await page.locator('#send_textarea').inputValue(),'预览输入仍可操作');
+  await page.locator('#send_textarea').fill('');
+  report.checks.push('version and mode controls are visible, fully within 633×696 and clickable under the real transformed html; latest-release choice and chat input are accessible');
+
+  const menu=page.getByRole('button',{name:'房东模拟器功能菜单',exact:true});
+  await assertInViewport(menu,'floating menu');await menu.click();
+  const apartmentButton=page.getByRole('button',{name:'掌上公寓',exact:true});
+  await assertInViewport(apartmentButton,'apartment menu button');
+  await page.waitForFunction(()=>{
+    const images=[...document.querySelectorAll('.fmm-sub-fab img')];
+    return images.length>0&&images.every(img=>img.src.startsWith('data:image/svg+xml,')&&img.complete&&img.naturalWidth>0);
+  });
+  assert.ok(await apartmentButton.locator('img').evaluate(img=>img.complete&&img.naturalWidth>0),'apartment icon must decode even with Iconify blocked');
+  await apartmentButton.click();await page.locator('#apartment-main-panel.active').waitFor({state:'visible'});
+  assert.ok(await page.locator('#apartment-main-panel .dock-button-icon').first().isVisible(),'apartment action icons must render');
+  await page.screenshot({path:path.join(root,'.local/real-sillytavern-narrow.png')});
+  await page.locator('#apartment-main-panel .control-dot.red[title="关闭"]').click();
+  report.checks.push('Iconify is blocked; every floating menu image decodes from bundled SVG and the apartment icon opens the real apartment with visible action icons');
 
   await page.locator('#landlord-controls summary').click();await page.getByRole('button',{name:'使用二改版',exact:true}).click();
   await page.waitForFunction(()=>LandlordRuntime.mode==='remix' && LandlordRuntime.running);

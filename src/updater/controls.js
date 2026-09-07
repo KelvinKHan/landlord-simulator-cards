@@ -1,3 +1,5 @@
+import { mountViewportPanel } from '../runtime/viewport-panel.js';
+
 const INSTANCE = Symbol.for('landlord.version-controls');
 
 /** The owner supplies storage, release discovery and the guarded page refresh. */
@@ -50,7 +52,7 @@ export function mountVersionControls({ host, getState, refresh, apply }) {
   actions.append(refreshButton, applyButton);
   body.append(description, label, select, warning, actions, status, error);
   panel.append(style, summary, body);
-  doc.body.append(panel);
+  const removePanel = mountViewportPanel(host, panel, 100002);
 
   let disposed = false, pending = '', localError = '', lastPreference = null, draft = 'latest', autoRefreshStarted = false;
   let observedBusy = false, busyTimer;
@@ -122,7 +124,7 @@ export function mountVersionControls({ host, getState, refresh, apply }) {
       panel.removeEventListener('toggle', render);
       refreshButton.removeEventListener('click', onRefresh);
       applyButton.removeEventListener('click', onApply);
-      panel.remove();
+      removePanel();
       if (host[INSTANCE] === controls) delete host[INSTANCE];
     },
   };

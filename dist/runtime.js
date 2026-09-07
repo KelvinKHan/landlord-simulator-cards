@@ -102,6 +102,8 @@ async function mount2(__landlordScope) {
       // 子球尺寸
       SUB_SPACING: 60,
       // 子球间距
+      VIEWPORT_MARGIN: 8,
+      // 保留触摸和阴影的边缘空间
       DRAG_THRESHOLD: 5,
       // 拖拽阈值（px）
       ANIMATION_DURATION: 300,
@@ -131,6 +133,8 @@ async function mount2(__landlordScope) {
       // 是否移动过
       buttons: [],
       // 注册的按钮配置
+      cleanups: [],
+      // 重新初始化时移除宿主页面上的监听
       elements: {
         // DOM元素引用
         main: null,
@@ -207,6 +211,13 @@ async function mount2(__landlordScope) {
     z-index: ${CONFIG.Z_INDEX_SUB};
     pointer-events: none;
 }
+.fmm-sub-container.scrollable.expanded {
+    pointer-events: auto;
+    overflow: auto;
+    overscroll-behavior: contain;
+    background: rgba(31, 41, 55, 0.9);
+    border-radius: 12px;
+}
 
 /* \u5B50\u60AC\u6D6E\u7403 */
 .fmm-sub-fab {
@@ -219,54 +230,29 @@ async function mount2(__landlordScope) {
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    transition: transform 0.2s ease, opacity 0.2s ease, box-shadow 0.2s ease;
     user-select: none;
     -webkit-user-select: none;
-    pointer-events: auto;
+    pointer-events: none;
     opacity: 0;
-    transform: scale(0);
+    visibility: hidden;
+    transform: scale(0.8);
 }
-
-.fmm-sub-fab:hover {
+.fmm-sub-container.expanded .fmm-sub-fab {
+    pointer-events: auto;
+    opacity: 1;
+    visibility: visible;
+    transform: scale(1);
+}
+.fmm-sub-container.expanded .fmm-sub-fab:hover {
     transform: scale(1.1);
     box-shadow: 0 4px 20px rgba(0,0,0,0.35);
 }
 
-.fmm-sub-fab:active {
+.fmm-sub-container.expanded .fmm-sub-fab:active {
     transform: scale(0.9);
 }
 
-/* \u5C55\u5F00\u52A8\u753B */
-@keyframes fmmExpandBall {
-    0% {
-        opacity: 0;
-        transform: translateY(0) scale(0);
-    }
-    100% {
-        opacity: 1;
-        transform: translateY(var(--offset)) scale(1);
-    }
-}
-
-/* \u6536\u8D77\u52A8\u753B */
-@keyframes fmmCollapseBall {
-    0% {
-        opacity: 1;
-        transform: translateY(var(--offset)) scale(1);
-    }
-    100% {
-        opacity: 0;
-        transform: translateY(0) scale(0);
-    }
-}
-
-.fmm-sub-fab.expanding {
-    animation: fmmExpandBall ${CONFIG.ANIMATION_DURATION}ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-}
-
-.fmm-sub-fab.collapsing {
-    animation: fmmCollapseBall ${CONFIG.ANIMATION_DURATION}ms ease-in forwards;
-}
 </style>
         `;
       parentDocument.head.insertAdjacentHTML("beforeend", styles);
@@ -274,6 +260,10 @@ async function mount2(__landlordScope) {
     function createMainFab() {
       const fab = parentDocument.createElement("div");
       fab.className = "fmm-main-fab";
+      fab.setAttribute("role", "button");
+      fab.setAttribute("aria-label", "\u623F\u4E1C\u6A21\u62DF\u5668\u529F\u80FD\u83DC\u5355");
+      fab.setAttribute("aria-expanded", "false");
+      fab.tabIndex = 0;
       fab.innerHTML = `<div class="icon">${ICONS.menu}</div>`;
       fab.style.top = state.position.top + "px";
       fab.style.left = state.position.left + "px";
@@ -289,31 +279,103 @@ async function mount2(__landlordScope) {
       state.elements.subContainer = container;
       return container;
     }
+    function viewportBounds() {
+      const viewport = __landlordScope.value("window").parent.visualViewport;
+      const left = viewport ? viewport.offsetLeft : 0;
+      const top = viewport ? viewport.offsetTop : 0;
+      const width = viewport ? viewport.width : __landlordScope.value("window").parent.innerWidth;
+      const height = viewport ? viewport.height : __landlordScope.value("window").parent.innerHeight;
+      const margin = CONFIG.VIEWPORT_MARGIN;
+      return {
+        left: left + margin,
+        top: top + margin,
+        right: left + width - margin,
+        bottom: top + height - margin
+      };
+    }
+    function clamp(value, min, max) {
+      return Math.max(min, Math.min(value, Math.max(min, max)));
+    }
     function updateSubContainerPosition() {
       if (!state.elements.main || !state.elements.subContainer) return;
       const container = state.elements.subContainer;
-      container.style.top = state.position.top + "px";
-      container.style.left = state.position.left + "px";
-      container.style.width = CONFIG.SUB_SIZE + "px";
-      container.style.height = state.buttons.length * CONFIG.SUB_SPACING + "px";
+      const count = state.elements.subs.length;
+      if (!count) return;
+      const bounds = viewportBounds();
+      const size = CONFIG.SUB_SIZE, spacing = CONFIG.SUB_SPACING, gap = spacing - size;
+      const { top, left } = state.position;
+      const mainBottom = top + CONFIG.MAIN_SIZE, mainRight = left + CONFIG.MAIN_SIZE;
+      const length = count * spacing - gap;
+      const centerX = clamp(left + (CONFIG.MAIN_SIZE - size) / 2, bounds.left, bounds.right - size);
+      const centerY = clamp(top + (CONFIG.MAIN_SIZE - size) / 2, bounds.top, bounds.bottom - size);
+      let positions, scrollable = false, region;
+      if (top - gap - bounds.top >= length) {
+        positions = state.elements.subs.map((_, i) => ({ left: centerX, top: top - gap - size - i * spacing }));
+      } else if (bounds.bottom - mainBottom - gap >= length) {
+        positions = state.elements.subs.map((_, i) => ({ left: centerX, top: mainBottom + gap + i * spacing }));
+      } else if (bounds.right - mainRight - gap >= length) {
+        positions = state.elements.subs.map((_, i) => ({ left: mainRight + gap + i * spacing, top: centerY }));
+      } else if (left - gap - bounds.left >= length) {
+        positions = state.elements.subs.map((_, i) => ({ left: left - gap - size - i * spacing, top: centerY }));
+      } else {
+        const regions = [
+          { left: bounds.left, top: bounds.top, right: bounds.right, bottom: top - gap },
+          { left: bounds.left, top: mainBottom + gap, right: bounds.right, bottom: bounds.bottom },
+          { left: bounds.left, top: bounds.top, right: left - gap, bottom: bounds.bottom },
+          { left: mainRight + gap, top: bounds.top, right: bounds.right, bottom: bounds.bottom }
+        ].map((area) => ({
+          ...area,
+          columns: Math.max(0, Math.floor((area.right - area.left + gap) / spacing)),
+          rows: Math.max(0, Math.floor((area.bottom - area.top + gap) / spacing))
+        })).sort((a, b) => b.columns * b.rows - a.columns * a.rows);
+        region = regions[0];
+        if (!region.columns || !region.rows) {
+          region = { ...bounds, columns: Math.max(1, Math.floor((bounds.right - bounds.left + gap) / spacing)), rows: 1 };
+        }
+        scrollable = region.columns * region.rows < count;
+        const columns = Math.min(count, region.columns);
+        positions = state.elements.subs.map((_, i) => ({
+          left: region.left + i % columns * spacing,
+          top: region.top + Math.floor(i / columns) * spacing
+        }));
+      }
+      const originLeft = Math.min(...positions.map((position) => position.left));
+      const originTop = Math.min(...positions.map((position) => position.top));
+      container.style.left = originLeft + "px";
+      container.style.top = originTop + "px";
+      container.style.width = Math.max(...positions.map((position) => position.left)) + size - originLeft + "px";
+      container.style.height = (scrollable ? region.bottom - originTop : Math.max(...positions.map((position) => position.top)) + size - originTop) + "px";
+      container.classList.toggle("scrollable", scrollable);
+      container.classList.toggle("expanded", state.isExpanded);
+      state.elements.subs.forEach((fab, index) => {
+        fab.style.left = positions[index].left - originLeft + "px";
+        fab.style.top = positions[index].top - originTop + "px";
+        fab.tabIndex = state.isExpanded ? 0 : -1;
+      });
     }
     function createSubFab(config, index) {
       const fab = parentDocument.createElement("div");
       fab.className = "fmm-sub-fab";
+      fab.setAttribute("role", "button");
+      fab.setAttribute("aria-label", config.label || config.id);
+      fab.title = config.label || config.id;
+      fab.tabIndex = state.isExpanded ? 0 : -1;
       fab.style.background = config.color || "linear-gradient(135deg, #667eea 0%, #764ba2 100%)";
       if (typeof config.icon === "string") {
         fab.innerHTML = config.icon;
       } else {
         fab.textContent = config.icon || "\u25CF";
       }
-      const offset = -(index + 1) * CONFIG.SUB_SPACING;
-      fab.style.setProperty("--offset", offset + "px");
-      fab.style.top = "0px";
-      fab.style.left = "4px";
       fab.addEventListener("click", function(e) {
         e.stopPropagation();
         if (config.onClick && typeof config.onClick === "function") {
           config.onClick();
+        }
+      });
+      fab.addEventListener("keydown", function(e) {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          fab.click();
         }
       });
       state.elements.subContainer.appendChild(fab);
@@ -334,14 +396,8 @@ async function mount2(__landlordScope) {
       const icon = state.elements.main.querySelector(".icon");
       icon.innerHTML = ICONS.chevronDown;
       state.elements.main.classList.add("expanded");
-      state.elements.subs.forEach((fab, index) => {
-        fab.classList.remove("collapsing");
-        fab.classList.add("expanding");
-        __landlordScope.value("setTimeout")(() => {
-          fab.style.opacity = "1";
-          fab.style.transform = `translateY(${-(index + 1) * CONFIG.SUB_SPACING}px) scale(1)`;
-        }, index * 50);
-      });
+      state.elements.main.setAttribute("aria-expanded", "true");
+      updateSubContainerPosition();
     }
     function collapse() {
       if (!state.isExpanded) return;
@@ -349,13 +405,10 @@ async function mount2(__landlordScope) {
       const icon = state.elements.main.querySelector(".icon");
       icon.innerHTML = ICONS.menu;
       state.elements.main.classList.remove("expanded");
-      state.elements.subs.forEach((fab, index) => {
-        fab.classList.remove("expanding");
-        fab.classList.add("collapsing");
-        __landlordScope.value("setTimeout")(() => {
-          fab.style.opacity = "0";
-          fab.style.transform = "translateY(0) scale(0)";
-        }, index * 30);
+      state.elements.main.setAttribute("aria-expanded", "false");
+      state.elements.subContainer.classList.remove("expanded");
+      state.elements.subs.forEach((fab) => {
+        fab.tabIndex = -1;
       });
     }
     function toggle() {
@@ -367,15 +420,26 @@ async function mount2(__landlordScope) {
     }
     function bindMainFabEvents(fab) {
       let rafId = null;
+      let pendingMove = null;
+      function applyMove() {
+        if (!pendingMove) return;
+        const bounds = viewportBounds();
+        state.position.left = clamp(pendingMove.left, bounds.left, bounds.right - CONFIG.MAIN_SIZE);
+        state.position.top = clamp(pendingMove.top, bounds.top, bounds.bottom - CONFIG.MAIN_SIZE);
+        pendingMove = null;
+        fab.style.left = state.position.left + "px";
+        fab.style.top = state.position.top + "px";
+        updateSubContainerPosition();
+        rafId = null;
+      }
       function handleStart(e) {
         const touch = e.touches ? e.touches[0] : e;
         state.isDragging = true;
         state.hasMoved = false;
         state.dragData.startX = touch.clientX;
         state.dragData.startY = touch.clientY;
-        const rect = fab.getBoundingClientRect();
-        state.dragData.initialTop = rect.top;
-        state.dragData.initialLeft = rect.left;
+        state.dragData.initialTop = state.position.top;
+        state.dragData.initialLeft = state.position.left;
         fab.classList.add("dragging");
         e.preventDefault();
       }
@@ -388,26 +452,14 @@ async function mount2(__landlordScope) {
           state.hasMoved = true;
         }
         if (rafId) __landlordScope.value("cancelAnimationFrame")(rafId);
-        rafId = __landlordScope.value("requestAnimationFrame")(() => {
-          const newLeft = Math.max(0, Math.min(
-            state.dragData.initialLeft + deltaX,
-            __landlordScope.value("window").parent.innerWidth - CONFIG.MAIN_SIZE
-          ));
-          const newTop = Math.max(0, Math.min(
-            state.dragData.initialTop + deltaY,
-            __landlordScope.value("window").parent.innerHeight - CONFIG.MAIN_SIZE
-          ));
-          state.position.left = newLeft;
-          state.position.top = newTop;
-          fab.style.left = newLeft + "px";
-          fab.style.top = newTop + "px";
-          updateSubContainerPosition();
-          rafId = null;
-        });
+        pendingMove = { left: state.dragData.initialLeft + deltaX, top: state.dragData.initialTop + deltaY };
+        rafId = __landlordScope.value("requestAnimationFrame")(applyMove);
         e.preventDefault();
       }
       function handleEnd(e) {
         if (!state.isDragging) return;
+        if (rafId) __landlordScope.value("cancelAnimationFrame")(rafId);
+        applyMove();
         state.isDragging = false;
         fab.classList.remove("dragging");
         savePosition();
@@ -417,12 +469,29 @@ async function mount2(__landlordScope) {
         state.hasMoved = false;
         e.preventDefault();
       }
-      fab.addEventListener("mousedown", handleStart);
-      parentDocument.addEventListener("mousemove", handleMove);
-      parentDocument.addEventListener("mouseup", handleEnd);
-      fab.addEventListener("touchstart", handleStart, { passive: false });
-      parentDocument.addEventListener("touchmove", handleMove, { passive: false });
-      parentDocument.addEventListener("touchend", handleEnd, { passive: false });
+      listen(fab, "mousedown", handleStart);
+      listen(parentDocument, "mousemove", handleMove);
+      listen(parentDocument, "mouseup", handleEnd);
+      listen(fab, "touchstart", handleStart, { passive: false });
+      listen(parentDocument, "touchmove", handleMove, { passive: false });
+      listen(parentDocument, "touchend", handleEnd, { passive: false });
+      listen(parentDocument, "touchcancel", handleEnd, { passive: false });
+      listen(fab, "keydown", function(e) {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          toggle();
+        }
+      });
+      listen(parentDocument, "keydown", function(e) {
+        if (e.key === "Escape" && state.isExpanded) collapse();
+      });
+      state.cleanups.push(() => {
+        if (rafId) __landlordScope.value("cancelAnimationFrame")(rafId);
+      });
+    }
+    function listen(target, type, callback, options) {
+      target.addEventListener(type, callback, options);
+      state.cleanups.push(() => target.removeEventListener(type, callback, options));
     }
     function savePosition() {
       try {
@@ -441,8 +510,8 @@ async function mount2(__landlordScope) {
         const saved = __landlordScope.value("localStorage").getItem(CONFIG.STORAGE_KEY);
         if (saved) {
           const data = JSON.parse(saved);
-          state.position.top = data.top || 100;
-          state.position.left = data.left || 20;
+          state.position.top = Number.isFinite(data.top) ? data.top : 100;
+          state.position.left = Number.isFinite(data.left) ? data.left : 20;
         }
       } catch (e) {
         __landlordScope.value("console").error("[FloatingMenuManager] \u52A0\u8F7D\u4F4D\u7F6E\u5931\u8D25:", e);
@@ -450,40 +519,35 @@ async function mount2(__landlordScope) {
     }
     function adjustPositionToViewport() {
       if (!state.elements.main) return;
-      const maxLeft = __landlordScope.value("window").parent.innerWidth - CONFIG.MAIN_SIZE;
-      const maxTop = __landlordScope.value("window").parent.innerHeight - CONFIG.MAIN_SIZE;
-      let adjusted = false;
-      if (state.position.left > maxLeft) {
-        state.position.left = Math.max(0, maxLeft);
-        adjusted = true;
-      }
-      if (state.position.top > maxTop) {
-        state.position.top = Math.max(0, maxTop);
-        adjusted = true;
-      }
-      if (state.position.left < 0) {
-        state.position.left = 0;
-        adjusted = true;
-      }
-      if (state.position.top < 0) {
-        state.position.top = 0;
-        adjusted = true;
-      }
+      const bounds = viewportBounds();
+      const left = clamp(state.position.left, bounds.left, bounds.right - CONFIG.MAIN_SIZE);
+      const top = clamp(state.position.top, bounds.top, bounds.bottom - CONFIG.MAIN_SIZE);
+      const adjusted = left !== state.position.left || top !== state.position.top;
+      state.position.left = left;
+      state.position.top = top;
       if (adjusted) {
         state.elements.main.style.left = state.position.left + "px";
         state.elements.main.style.top = state.position.top + "px";
-        updateSubContainerPosition();
         savePosition();
       }
+      updateSubContainerPosition();
     }
     function bindWindowResize() {
       let resizeTimer = null;
-      __landlordScope.value("window").parent.addEventListener("resize", function() {
+      function scheduleResize() {
         if (resizeTimer) __landlordScope.value("clearTimeout")(resizeTimer);
         resizeTimer = __landlordScope.value("setTimeout")(function() {
           adjustPositionToViewport();
           resizeTimer = null;
         }, 100);
+      }
+      listen(__landlordScope.value("window").parent, "resize", scheduleResize);
+      if (__landlordScope.value("window").parent.visualViewport) {
+        listen(__landlordScope.value("window").parent.visualViewport, "resize", scheduleResize);
+        listen(__landlordScope.value("window").parent.visualViewport, "scroll", scheduleResize);
+      }
+      state.cleanups.push(() => {
+        if (resizeTimer) __landlordScope.value("clearTimeout")(resizeTimer);
       });
     }
     const FloatingMenuManager = {
@@ -577,6 +641,7 @@ async function mount2(__landlordScope) {
        * 销毁管理器
        */
       destroy: function() {
+        state.cleanups.splice(0).forEach((cleanup) => cleanup());
         if (state.elements.main) {
           state.elements.main.remove();
           state.elements.main = null;
@@ -1872,7 +1937,7 @@ async function mount3(__landlordScope) {
   const html = `
 <!-- \u62D6\u52A8\u6309\u94AE -->
 <div id="apartment-toggle-btn" class="apartment-toggle-btn">
-    <img src="https://api.iconify.design/ri:building-4-fill.svg?color=%23ffffff" style="width:28px;height:28px;">
+    <img src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M21%2020h2v2H1v-2h2V3a1%201%200%200%201%201-1h16a1%201%200%200%201%201%201zM8%2011v2h3v-2zm0-4v2h3V7zm0%208v2h3v-2zm5%200v2h3v-2zm0-4v2h3v-2zm0-4v2h3V7z%22%2F%3E%3C%2Fsvg%3E" style="width:28px;height:28px;">
 </div>
 
 <!-- \u4E3B\u9762\u677F (Pink Mac Window) -->
@@ -2147,7 +2212,7 @@ async function mount3(__landlordScope) {
       const panel = targetDoc.getElementById("apartment-main-panel");
       __landlordScope.value("window").parent.FloatingMenuManager.registerButton({
         id: "apartment",
-        icon: '<img src="https://api.iconify.design/mdi:home-city.svg?color=%23ffffff" style="width:26px;height:26px;">',
+        icon: '<img src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M0%2021V10l7.5-5l7.5%205v11h-5v-7H5v7zM24%202v19h-7V8.93l-1-.66V6h-2v.93l-4-2.66V2zm-3%2012h-2v2h2zm0-4h-2v2h2zm0-4h-2v2h2z%22%2F%3E%3C%2Fsvg%3E" style="width:26px;height:26px;">',
         label: "\u638C\u4E0A\u516C\u5BD3",
         onClick: function() {
           panel.classList.toggle("active");
@@ -4264,7 +4329,7 @@ async function mount4(__landlordScope) {
   var _phoneFmmRegistered = false;
   var _phoneFmmConfig = {
     id: "phone",
-    icon: '<img src="https://api.iconify.design/lucide:smartphone.svg?color=%23ffffff" style="width:24px;height:24px;">',
+    icon: '<img src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cg%20fill%3D%22none%22%20stroke%3D%22%23ffffff%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20stroke-width%3D%222%22%3E%3Crect%20width%3D%2214%22%20height%3D%2220%22%20x%3D%225%22%20y%3D%222%22%20rx%3D%222%22%20ry%3D%222%22%2F%3E%3Cpath%20d%3D%22M12%2018h.01%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E" style="width:24px;height:24px;">',
     label: "\u5C0F\u624B\u673A",
     onClick: function() {
       togglePhone();
@@ -7196,7 +7261,7 @@ async function mount11(__landlordScope) {
     "use strict";
     const APP_ID = "tenant_chat";
     const APP_NAME = "WeChat";
-    const APP_ICON = '<img src="https://api.iconify.design/ri:wechat-fill.svg?color=white" style="width:70%;height:70%">';
+    const APP_ICON = '<img src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22white%22%20d%3D%22M18.575%2013.711a.91.91%200%200%200%20.898-.898a.895.895%200%200%200-.898-.898a.894.894%200%200%200-.898.898c0%20.5.4.898.898.898m-4.425%200a.91.91%200%200%200%20.898-.898c0-.498-.4-.898-.898-.898a.894.894%200%200%200-.898.898c0%20.5.399.898.898.898m6.567%205.04a.35.35%200%200%200-.172.37c0%20.048%200%20.098.025.147c.098.417.294%201.081.294%201.106c0%20.073.025.122.025.172a.22.22%200%200%201-.221.22c-.05%200-.074-.024-.123-.048l-1.449-.836a.8.8%200%200%200-.344-.098c-.073%200-.147%200-.196.024c-.688.197-1.4.295-2.161.295c-3.66%200-6.607-2.457-6.607-5.505s2.947-5.505%206.607-5.505c3.659%200%206.606%202.458%206.606%205.505c0%201.647-.884%203.146-2.284%204.154M16.674%208.099a9%209%200%200%200-.28-.005c-4.174%200-7.606%202.86-7.606%206.505c0%20.554.08%201.09.228%201.6h-.089a10%2010%200%200%201-2.584-.368c-.074-.025-.148-.025-.222-.025a.83.83%200%200%200-.419.123l-1.747%201.005a.35.35%200%200%201-.148.05a.273.273%200%200%201-.27-.27c0-.074.024-.123.049-.197c.024-.024.246-.834.369-1.324c0-.05.024-.123.024-.172a.56.56%200%200%200-.221-.441C2.059%2013.376%201%2011.586%201%209.599C1.001%205.944%204.571%203%208.951%203c3.765%200%206.93%202.169%207.723%205.098m-5.154.418c.573%200%201.026-.477%201.026-1.026c0-.573-.453-1.026-1.026-1.026s-1.026.453-1.026%201.026s.453%201.026%201.026%201.026m-5.26%200c.573%200%201.027-.477%201.027-1.026c0-.573-.454-1.026-1.027-1.026c-.572%200-1.026.453-1.026%201.026s.454%201.026%201.026%201.026%22%2F%3E%3C%2Fsvg%3E" style="width:70%;height:70%">';
     const GROUP_NAME = "\u516C\u5BD3\u4E1A\u4E3B\u7FA4";
     let cachedUserAvatarPath = null;
     function getUserAvatarPath() {
@@ -8051,15 +8116,15 @@ async function mount11(__landlordScope) {
                 <div class="chat-list-view" id="chat-list-view">
                     <div class="chat-list-header">
                         <button class="chat-list-back-btn" id="btn-go-home" title="\u8FD4\u56DE" onclick="goHome()">
-                            <img src="https://api.iconify.design/ri:arrow-left-s-line.svg">
+                            <img src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22black%22%20d%3D%22m10.828%2012l4.95%204.95l-1.414%201.415L8%2012l6.364-6.364l1.414%201.414z%22%2F%3E%3C%2Fsvg%3E">
                         </button>
                         <span class="chat-list-title">\u5FAE\u4FE1</span>
                         <div class="chat-list-actions">
                             <button class="chat-list-btn" id="btn-new-chat" title="\u53D1\u8D77\u7FA4\u804A">
-                                <img src="https://api.iconify.design/ri:add-line.svg">
+                                <img src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22black%22%20d%3D%22M11%2011V5h2v6h6v2h-6v6h-2v-6H5v-2z%22%2F%3E%3C%2Fsvg%3E">
                             </button>
                             <button class="chat-list-btn" id="btn-chat-settings" title="\u8BBE\u7F6E">
-                                <img src="https://api.iconify.design/ri:settings-3-line.svg">
+                                <img src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22black%22%20d%3D%22M3.34%2017a10%2010%200%200%201-.979-2.326a3%203%200%200%200%20.003-5.347a10%2010%200%200%201%202.5-4.337a3%203%200%200%200%204.632-2.674a10%2010%200%200%201%205.007.003a3%203%200%200%200%204.632%202.671a10.06%2010.06%200%200%201%202.503%204.336a3%203%200%200%200-.002%205.347a10%2010%200%200%201-2.501%204.337a3%203%200%200%200-4.632%202.674a10%2010%200%200%201-5.007-.002a3%203%200%200%200-4.631-2.672A10%2010%200%200%201%203.339%2017m5.66.196a5%205%200%200%201%202.25%202.77q.75.07%201.499.002a5%205%200%200%201%202.25-2.772a5%205%200%200%201%203.526-.564q.435-.614.748-1.298A5%205%200%200%201%2018%2012c0-1.26.47-2.437%201.273-3.334a8%208%200%200%200-.75-1.298A5%205%200%200%201%2015%206.804a5%205%200%200%201-2.25-2.77q-.75-.071-1.5-.001A5%205%200%200%201%209%206.804a5%205%200%200%201-3.526.564q-.436.614-.747%201.298A5%205%200%200%201%206%2012c0%201.26-.471%202.437-1.273%203.334a8%208%200%200%200%20.75%201.298A5%205%200%200%201%209%2017.196M12%2015a3%203%200%201%201%200-6a3%203%200%200%201%200%206m0-2a1%201%200%201%200%200-2a1%201%200%200%200%200%202%22%2F%3E%3C%2Fsvg%3E">
                             </button>
                         </div>
                     </div>
@@ -8077,7 +8142,7 @@ async function mount11(__landlordScope) {
             <div class="chat-room-view" id="chat-room-view">
                 <div class="chat-room-header">
                     <button class="chat-back-btn" id="btn-back-to-list">
-                        <img src="https://api.iconify.design/ri:arrow-left-s-line.svg">
+                        <img src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22black%22%20d%3D%22m10.828%2012l4.95%204.95l-1.414%201.415L8%2012l6.364-6.364l1.414%201.414z%22%2F%3E%3C%2Fsvg%3E">
                     </button>
                     <span class="chat-room-title">${conv.name}</span>
                     ${isGroup ? `<span class="chat-room-info">(${memberCount})</span>` : ""}
@@ -8095,18 +8160,18 @@ async function mount11(__landlordScope) {
                 <div class="sticker-picker-panel" id="sticker-picker-panel">
                     <div class="sticker-picker-grid" id="sticker-picker-grid">
                         <div class="sticker-picker-empty">
-                            <img src="https://api.iconify.design/ri:emotion-sad-line.svg">
+                            <img src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22black%22%20d%3D%22M12%202c5.523%200%2010%204.477%2010%2010c0%20.727-.078%201.435-.225%202.118l-1.782-1.783Q20%2012.17%2020%2012a8%208%200%201%200-4.381%207.137q.232.37.553.691c.302.303.64.547%201.001.732A9.96%209.96%200%200%201%2012%2022C6.477%2022%202%2017.523%202%2012S6.477%202%2012%202m7%2012.172l1.414%201.414a2%202%200%201%201-2.93.11l.102-.11zM12%2015c1.466%200%202.785.631%203.7%201.637l-.945.86C13.965%2017.182%2013.018%2017%2012%2017s-1.965.183-2.755.496l-.945-.86A5%205%200%200%201%2012%2015m-3.5-5a1.5%201.5%200%201%201%200%203a1.5%201.5%200%200%201%200-3m7%200a1.5%201.5%200%201%201%200%203a1.5%201.5%200%200%201%200-3%22%2F%3E%3C%2Fsvg%3E">
                             \u52A0\u8F7D\u4E2D...
                         </div>
                     </div>
                 </div>
                 <div class="chat-input-area">
                     <div style="font-size:24px;color:#7f8389;display:flex;align-items:center;padding-bottom:10px;">
-                        <img src="https://api.iconify.design/ri:mic-line.svg" style="width:24px;">
+                        <img src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22black%22%20d%3D%22M12%203a3%203%200%200%200-3%203v4a3%203%200%201%200%206%200V6a3%203%200%200%200-3-3m0-2a5%205%200%200%201%205%205v4a5%205%200%200%201-10%200V6a5%205%200%200%201%205-5M3.055%2011H5.07a7.002%207.002%200%200%200%2013.858%200h2.016A9.004%209.004%200%200%201%2013%2018.945V23h-2v-4.055A9.004%209.004%200%200%201%203.055%2011%22%2F%3E%3C%2Fsvg%3E" style="width:24px;">
                     </div>
                     <textarea class="chat-input" id="chat-input" rows="1"></textarea>
                     <div id="btn-sticker-toggle" style="font-size:24px;color:#7f8389;display:flex;align-items:center;padding-bottom:10px;cursor:pointer;" title="\u8868\u60C5\u5305">
-                        <img src="https://api.iconify.design/ri:emotion-line.svg" style="width:24px;">
+                        <img src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22black%22%20d%3D%22M12%2022C6.477%2022%202%2017.523%202%2012S6.477%202%2012%202s10%204.477%2010%2010s-4.477%2010-10%2010m0-2a8%208%200%201%200%200-16a8%208%200%200%200%200%2016m-4-7h8a4%204%200%200%201-8%200m0-2a1.5%201.5%200%201%201%200-3a1.5%201.5%200%200%201%200%203m8%200a1.5%201.5%200%201%201%200-3a1.5%201.5%200%200%201%200%203%22%2F%3E%3C%2Fsvg%3E" style="width:24px;">
                     </div>
                     <button class="chat-send-btn" id="btn-send">\u53D1\u9001</button>
                 </div>
@@ -8118,7 +8183,7 @@ async function mount11(__landlordScope) {
             <div class="chat-settings-panel" id="chat-settings-panel">
                 <div class="settings-header">
                     <button class="settings-back-btn" id="btn-settings-back">
-                        <img src="https://api.iconify.design/ri:arrow-left-s-line.svg">
+                        <img src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22black%22%20d%3D%22m10.828%2012l4.95%204.95l-1.414%201.415L8%2012l6.364-6.364l1.414%201.414z%22%2F%3E%3C%2Fsvg%3E">
                     </button>
                     <span class="settings-title">\u8BBE\u7F6E</span>
                 </div>
@@ -8154,7 +8219,7 @@ async function mount11(__landlordScope) {
       if (availableTenants.length === 0) {
         listHTML = `
                 <div class="empty-state">
-                    <img src="https://api.iconify.design/ri:chat-check-line.svg">
+                    <img src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22black%22%20d%3D%22M6.455%2019L2%2022.5V4a1%201%200%200%201%201-1h18a1%201%200%200%201%201%201v14a1%201%200%200%201-1%201zm-.692-2H20V5H4v13.385zm5.53-4.879l4.243-4.242l1.414%201.414l-5.657%205.657l-3.89-3.89l1.415-1.414z%22%2F%3E%3C%2Fsvg%3E">
                     <div class="empty-state-text">\u6240\u6709\u79DF\u5BA2\u90FD\u5DF2\u6709\u79C1\u804A\u4F1A\u8BDD</div>
                 </div>
             `;
@@ -8162,7 +8227,7 @@ async function mount11(__landlordScope) {
         listHTML = availableTenants.map((name) => `
                 <div class="tenant-item" data-name="${name}">
                     <div class="tenant-item-avatar">
-                        <img src="https://api.iconify.design/ri:user-3-line.svg?color=gray">
+                        <img src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22gray%22%20d%3D%22M20%2022h-2v-2a3%203%200%200%200-3-3H9a3%203%200%200%200-3%203v2H4v-2a5%205%200%200%201%205-5h6a5%205%200%200%201%205%205zm-8-9a6%206%200%201%201%200-12a6%206%200%200%201%200%2012m0-2a4%204%200%201%200%200-8a4%204%200%200%200%200%208%22%2F%3E%3C%2Fsvg%3E">
                     </div>
                     <div class="tenant-item-info">
                         <div class="tenant-item-name">${name}</div>
@@ -8174,7 +8239,7 @@ async function mount11(__landlordScope) {
             <div class="tenant-selector" id="tenant-selector">
                 <div class="settings-header">
                     <button class="settings-back-btn" id="btn-selector-back">
-                        <img src="https://api.iconify.design/ri:arrow-left-s-line.svg">
+                        <img src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22black%22%20d%3D%22m10.828%2012l4.95%204.95l-1.414%201.415L8%2012l6.364-6.364l1.414%201.414z%22%2F%3E%3C%2Fsvg%3E">
                     </button>
                     <span class="settings-title">\u9009\u62E9\u8054\u7CFB\u4EBA</span>
                 </div>
@@ -8194,10 +8259,10 @@ async function mount11(__landlordScope) {
         if (userAvatarPath) {
           avatarUrl = userAvatarPath;
         } else {
-          avatarUrl = `https://api.iconify.design/ri:user-star-fill.svg?color=%2307c160`;
+          avatarUrl = `data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22%2307c160%22%20d%3D%22M12%2014v8H4a8%208%200%200%201%208-8m6%207.5l-2.939%201.545l.561-3.273l-2.377-2.317l3.286-.477L18%2014l1.47%202.977l3.285.478l-2.377%202.318l.56%203.272zM12%2013c-3.315%200-6-2.685-6-6s2.685-6%206-6s6%202.685%206%206s-2.685%206-6%206%22%2F%3E%3C%2Fsvg%3E`;
         }
       } else {
-        avatarUrl = `https://api.iconify.design/ri:user-3-fill.svg?color=%23999`;
+        avatarUrl = `data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22%23999%22%20d%3D%22M20%2022H4v-2a5%205%200%200%201%205-5h6a5%205%200%200%201%205%205zm-8-9a6%206%200%201%201%200-12a6%206%200%200%201%200%2012%22%2F%3E%3C%2Fsvg%3E`;
       }
       const isSticker = msg.stickerImage && (msg.content.startsWith("[\u8868\u60C5\u5305\uFF1A") || msg.content.startsWith("[sticker:"));
       let bubbleContent;
@@ -8216,7 +8281,7 @@ async function mount11(__landlordScope) {
                     ${bubbleContent}
                     <div class="msg-time">${timeStr}</div>
                     <div class="msg-retract-btn" data-msg-id="${msg.id}" title="\u64A4\u56DE\u6D88\u606F">
-                        <img src="https://api.iconify.design/ri:delete-back-2-line.svg?color=%23666666">
+                        <img src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22%23666666%22%20d%3D%22M6.535%203h14.464a1%201%200%200%201%201%201v16a1%201%200%200%201-1%201H6.535a1%201%200%200%201-.833-.445l-5.333-8a1%201%200%200%201%200-1.11l5.333-8A1%201%200%200%201%206.535%203m.535%202l-4.667%207l4.667%207H20V5zM13%2010.586l2.828-2.829l1.414%201.415L14.414%2012l2.828%202.828l-1.414%201.415l-2.829-2.829l-2.828%202.829l-1.414-1.415L11.585%2012L8.757%209.172l1.414-1.415z%22%2F%3E%3C%2Fsvg%3E">
                     </div>
                 </div>
             </div>
@@ -8231,7 +8296,7 @@ async function mount11(__landlordScope) {
       const timeStr = lastMsg?.gameTime?.\u65F6\u95F4 || "";
       let avatarIcon = isGroup ? "ri:group-fill" : "ri:user-3-fill";
       let avatarColor = isGroup ? "#07c160" : "#888";
-      const avatarUrl = `https://api.iconify.design/${avatarIcon}.svg?color=white`;
+      const avatarUrl = __landlordScope.value("landlord").iconUrl(avatarIcon, "white");
       const avatarBg = isGroup ? "#07c160" : "#ddd";
       return `
             <div class="chat-list-item" data-conv-id="${conv.id}">
@@ -8317,7 +8382,7 @@ async function mount11(__landlordScope) {
         if (AppState.conversations.length === 0) {
           container.innerHTML = `
                     <div class="empty-state">
-                        <img src="https://api.iconify.design/ri:chat-smile-3-line.svg">
+                        <img src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22black%22%20d%3D%22M2%2012C2%206.477%206.477%202%2012%202s10%204.477%2010%2010s-4.477%2010-10%2010H2l2.929-2.929A9.97%209.97%200%200%201%202%2012m4.828%208H12a8%208%200%201%200-8-8c0%202.152.851%204.165%202.343%205.657l1.414%201.414zM8%2013h8a4%204%200%200%201-8%200%22%2F%3E%3C%2Fsvg%3E">
                         <div class="empty-state-text">\u6682\u65E0\u6D88\u606F<br>\u70B9\u51FB\u53F3\u4E0A\u89D2 + \u5F00\u59CB\u79C1\u804A</div>
                     </div>
                 `;
@@ -8367,7 +8432,7 @@ async function mount11(__landlordScope) {
         if (messages.length === 0) {
           container.innerHTML = `
                     <div class="empty-state">
-                        <img src="https://api.iconify.design/ri:chat-1-line.svg">
+                        <img src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22black%22%20d%3D%22M10%203h4a8%208%200%201%201%200%2016v3.5c-5-2-12-5-12-11.5a8%208%200%200%201%208-8m2%2014h2a6%206%200%200%200%200-12h-4a6%206%200%200%200-6%206c0%203.61%202.462%205.966%208%208.48z%22%2F%3E%3C%2Fsvg%3E">
                         <div class="empty-state-text">\u6253\u4E2A\u62DB\u547C\u5427</div>
                     </div>
                 `;
@@ -8473,7 +8538,7 @@ async function mount11(__landlordScope) {
       if (stickers.length === 0) {
         grid.innerHTML = `
                 <div class="sticker-picker-empty">
-                    <img src="https://api.iconify.design/ri:emotion-sad-line.svg">
+                    <img src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22black%22%20d%3D%22M12%202c5.523%200%2010%204.477%2010%2010c0%20.727-.078%201.435-.225%202.118l-1.782-1.783Q20%2012.17%2020%2012a8%208%200%201%200-4.381%207.137q.232.37.553.691c.302.303.64.547%201.001.732A9.96%209.96%200%200%201%2012%2022C6.477%2022%202%2017.523%202%2012S6.477%202%2012%202m7%2012.172l1.414%201.414a2%202%200%201%201-2.93.11l.102-.11zM12%2015c1.466%200%202.785.631%203.7%201.637l-.945.86C13.965%2017.182%2013.018%2017%2012%2017s-1.965.183-2.755.496l-.945-.86A5%205%200%200%201%2012%2015m-3.5-5a1.5%201.5%200%201%201%200%203a1.5%201.5%200%200%201%200-3m7%200a1.5%201.5%200%201%201%200%203a1.5%201.5%200%200%201%200-3%22%2F%3E%3C%2Fsvg%3E">
                     \u8FD8\u6CA1\u6709\u8868\u60C5\u5305<br>\u8BF7\u5728\u521B\u610F\u5DE5\u574A\u4E2D\u6DFB\u52A0
                 </div>
             `;
@@ -9682,7 +9747,7 @@ async function mount12(__landlordScope) {
       __landlordScope.value("console").log("[\u79DF\u5BA2APP] PhoneSystem\u5DF2\u5C31\u7EEA\uFF0C\u5F00\u59CB\u6CE8\u518C");
       var APP_ID = "tenant_analyzer";
       var APP_NAME = "\u79DF\u5BA2\u6863\u6848";
-      var APP_ICON = '<img src="https://api.iconify.design/ri:user-star-line.svg?color=white" style="width:70%;height:70%">';
+      var APP_ICON = '<img src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22white%22%20d%3D%22M12%2014v2a6%206%200%200%200-6%206H4a8%208%200%200%201%208-8m0-1c-3.315%200-6-2.685-6-6s2.685-6%206-6s6%202.685%206%206s-2.685%206-6%206m0-2c2.21%200%204-1.79%204-4s-1.79-4-4-4s-4%201.79-4%204s1.79%204%204%204m6%2010.5l-2.939%201.545l.561-3.273l-2.377-2.317l3.286-.477L18%2014l1.47%202.977l3.285.478l-2.377%202.318l.56%203.272z%22%2F%3E%3C%2Fsvg%3E" style="width:70%;height:70%">';
       __landlordScope.value("window").parent.PhoneSystem.registerApp({
         id: APP_ID,
         name: APP_NAME,
@@ -9755,7 +9820,7 @@ async function mount13(__landlordScope) {
     "use strict";
     const APP_ID = "debugger";
     const APP_NAME = "\u8C03\u8BD5\u7EC8\u7AEF";
-    const APP_ICON = '<img src="https://api.iconify.design/ri:bug-fill.svg?color=white" style="width:70%;height:70%">';
+    const APP_ICON = '<img src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22white%22%20d%3D%22M6.056%208.3a7%207%200%200%201%20.199-.3h11.49q.103.148.199.3l2.02-1.166l1%201.732l-2.213%201.278c.162.59.249%201.213.249%201.856v1h3v2h-3a7%207%200%200%201-.536%202.69l2.5%201.444l-1%201.732l-2.526-1.458A7%207%200%200%201%2013%2021.929V14h-2v7.93a7%207%200%200%201-4.438-2.522l-2.526%201.458l-1-1.732l2.5-1.443A7%207%200%200%201%205%2015H2v-2h3v-1c0-.643.087-1.265.249-1.856L3.036%208.866l1-1.732zM8%206a4%204%200%201%201%208%200z%22%2F%3E%3C%2Fsvg%3E" style="width:70%;height:70%">';
     const APP_COLOR = "linear-gradient(135deg, #2d3436, #000000)";
     const DebugData = {
       consoleLogs: [],
@@ -10560,7 +10625,7 @@ async function mount14(__landlordScope) {
       __landlordScope.value("console").log("[\u5730\u56FEAPP] PhoneSystem\u5DF2\u5C31\u7EEA\uFF0C\u5F00\u59CB\u521D\u59CB\u5316");
       const APP_ID = "map";
       const APP_NAME = "\u57CE\u5E02\u5730\u56FE";
-      const APP_ICON = '<img src="https://api.iconify.design/ri:map-2-fill.svg?color=white" style="width:70%;height:70%">';
+      const APP_ICON = '<img src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22white%22%20d%3D%22m2%205l7-3l6%203l6.303-2.701a.5.5%200%200%201%20.697.46V19l-7%203l-6-3l-6.303%202.701a.5.5%200%200%201-.697-.46zm13%2014.764V7.176l-.065.028L9%204.236v12.588l.065-.028z%22%2F%3E%3C%2Fsvg%3E" style="width:70%;height:70%">';
       const APP_COLOR = "linear-gradient(135deg, #1a3a5c, #2a5a8c)";
       const MAP_CONFIG = {
         image: "https://free.picui.cn/free/2025/11/26/6926a5eaed65b.png",
@@ -10902,7 +10967,7 @@ async function mount15(__landlordScope) {
         heartFill: '<i class="ri-heart-fill" style="font-size:24px;color:#ff4757"></i>',
         list: '<i class="ri-play-list-line" style="font-size:24px"></i>',
         down: '<i class="ri-arrow-down-s-line" style="font-size:32px"></i>',
-        music: '<img src="https://api.iconify.design/ri:netease-cloud-music-fill.svg?color=white" style="width:100%;height:100%">',
+        music: '<img src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22white%22%20d%3D%22M12.001%2022c-5.523%200-10-4.477-10-10s4.477-10%2010-10s10%204.477%2010%2010s-4.477%2010-10%2010m-1.086-10.432c.24-.84%201.075-1.541%201.99-1.648c.187.694.388%201.373.545%202.063c.053.23.037.495-.018.727c-.213.892-1.248%201.242-1.978.685c-.53-.405-.742-1.12-.539-1.827m3.817-.197c-.125-.465-.256-.927-.393-1.42c.5.13.907.36%201.255.697c1.257%201.222%201.385%203.3.294%204.732c-1.135%201.49-3.155%202.134-5.028%201.605c-2.302-.65-3.808-2.952-3.441-5.316c.274-1.768%201.27-3.004%202.9-3.733c.407-.182.58-.56.42-.93c-.157-.364-.54-.504-.944-.343c-2.721%201.088-4.32%204.134-3.67%206.987c.713%203.118%203.495%205.163%206.675%204.859c1.732-.166%203.164-.948%204.216-2.347c1.506-2.002%201.297-4.783-.463-6.499c-.666-.65-1.471-1.018-2.39-1.153c-.083-.013-.217-.052-.232-.106c-.087-.313-.18-.632-.206-.954c-.029-.357.29-.64.65-.645c.253-.003.434.13.603.3c.303.3.704.322.988.062c.29-.264.296-.678.018-1.008c-.566-.672-1.586-.891-2.43-.523c-.847.37-1.321%201.187-1.2%202.093c.038.28.11.557.167.842l-.26.072a3.86%203.86%200%200%200-2.098%201.414c-.921%201.22-.936%202.828-.041%203.947c1.274%201.594%203.747%201.284%204.523-.568c.284-.677.275-1.368.087-2.065%22%2F%3E%3C%2Fsvg%3E" style="width:100%;height:100%">',
         queue: '<i class="ri-play-list-line" style="font-size:22px"></i>',
         x: '<i class="ri-close-line" style="font-size:24px"></i>',
         stop: '<i class="ri-stop-circle-line" style="font-size:24px"></i>',
@@ -11903,7 +11968,7 @@ async function mount16(__landlordScope) {
       __landlordScope.value("console").log("[\u4E16\u754C\u5730\u56FE] PhoneSystem\u5DF2\u5C31\u7EEA\uFF0C\u5F00\u59CB\u521D\u59CB\u5316");
       const APP_ID = "world-map";
       const APP_NAME = "\u4E16\u754C\u5730\u56FE";
-      const APP_ICON = '<img src="https://api.iconify.design/ri:earth-fill.svg?color=white" style="width:70%;height:70%">';
+      const APP_ICON = '<img src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22white%22%20d%3D%22M12%202c5.523%200%2010%204.477%2010%2010s-4.477%2010-10%2010S2%2017.523%202%2012S6.477%202%2012%202m4.004%2010.878c-.345-.525-.594-.903-1.542-.753c-1.79.284-1.989.597-2.074%201.113l-.024.156l-.025.166c-.097.683-.094.941.22%201.27c1.265%201.328%202.023%202.285%202.253%202.845c.112.273.4%201.1.202%201.918a8.2%208.2%200%200%200%203.151-2.237c.11-.374.19-.84.19-1.404v-.105c0-.922%200-1.343-.652-1.716a7%207%200%200%200-.645-.325c-.367-.167-.61-.276-.938-.756q-.06-.085-.116-.172M12%203.833c-2.317%200-4.41.966-5.896%202.516c.177.123.331.296.437.534c.204.457.204.928.204%201.345c0%20.328%200%20.64.105.865c.144.308.766.44%201.315.554c.197.042.399.084.583.135c.506.14.898.595%201.211.96c.13.151.323.374.42.43c.05-.036.211-.211.29-.498c.062-.22.044-.414-.045-.52c-.56-.66-.529-1.93-.356-2.399c.272-.739%201.122-.684%201.744-.644c.232.015.45.03.614.009c.622-.078.814-1.025.949-1.21c.292-.4%201.186-1.003%201.74-1.375A8.1%208.1%200%200%200%2012%203.833%22%2F%3E%3C%2Fsvg%3E" style="width:70%;height:70%">';
       const APP_COLOR = "linear-gradient(135deg, #1e88e5, #43a047)";
       let mapInstance = null;
       let currentMarker = null;
@@ -12367,11 +12432,11 @@ async function mount17(__landlordScope) {
     var info = WEATHER_TYPES[weatherType];
     if (!info || !info.svg) return info ? info.icon : "\u{1F324}\uFE0F";
     var c = color || "%23ffffff";
-    return '<img src="https://api.iconify.design/' + info.svg + ".svg?color=" + c + '" style="width:' + size + "px;height:" + size + 'px;vertical-align:middle;filter:drop-shadow(0 2px 6px rgba(0,0,0,0.25));">';
+    return '<img src="' + __landlordScope.value("landlord").iconUrl(info.svg, c) + '" style="width:' + size + "px;height:" + size + 'px;vertical-align:middle;filter:drop-shadow(0 2px 6px rgba(0,0,0,0.25));">';
   }
   function iconSvg(name, size, color) {
     var c = color || "%23ffffff";
-    return '<img src="https://api.iconify.design/' + name + ".svg?color=" + c + '" style="width:' + size + "px;height:" + size + 'px;vertical-align:middle;">';
+    return '<img src="' + __landlordScope.value("landlord").iconUrl(name, c) + '" style="width:' + size + "px;height:" + size + 'px;vertical-align:middle;">';
   }
   var SEASONS = {
     spring: { months: [3, 4, 5], name: "\u6625\u5B63", baseTemp: 16, tempRange: 10, dayNightDiff: 8 },
@@ -13328,7 +13393,7 @@ async function mount17(__landlordScope) {
     var data = ws.data;
     __landlordScope.value("console").log("[\u5929\u6C14APP] \u6E32\u67D3\u6570\u636E:", data && data.forecast ? data.forecast.length + "\u5929\u9884\u62A5" : "\u65E0\u6570\u636E");
     if (!data || !data.forecast || data.forecast.length === 0) {
-      container.innerHTML = '<div style="height:100%;padding-top:44px;box-sizing:border-box;background:linear-gradient(180deg,#4A90D9 0%,#67B8DE 50%,#89CFF0 100%);color:white;font-family:-apple-system,BlinkMacSystemFont,sans-serif;display:flex;flex-direction:column;"><div style="display:flex;align-items:center;padding:12px 16px;"><div onclick="goHome()" style="cursor:pointer;display:flex;align-items:center;gap:4px;font-size:15px;opacity:0.9;"><img src="https://api.iconify.design/ri:arrow-left-s-line.svg?color=white" style="width:24px;height:24px;"><span>\u8FD4\u56DE</span></div><div style="flex:1;text-align:center;font-size:17px;font-weight:600;">\u5929\u6C14</div><div style="width:60px;"></div></div><div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px;text-align:center;"><div style="margin-bottom:24px;opacity:0.8;">' + weatherSvg("sunny", 80, "%2356CCF2") + '</div><div style="font-size:18px;font-weight:600;margin-bottom:12px;">\u6682\u65E0\u5929\u6C14\u6570\u636E</div><div style="font-size:14px;opacity:0.7;line-height:1.6;">\u5F00\u59CB\u6E38\u620F\u540E\u5373\u53EF\u67E5\u770B\u5929\u6C14\u9884\u62A5</div></div></div>';
+      container.innerHTML = '<div style="height:100%;padding-top:44px;box-sizing:border-box;background:linear-gradient(180deg,#4A90D9 0%,#67B8DE 50%,#89CFF0 100%);color:white;font-family:-apple-system,BlinkMacSystemFont,sans-serif;display:flex;flex-direction:column;"><div style="display:flex;align-items:center;padding:12px 16px;"><div onclick="goHome()" style="cursor:pointer;display:flex;align-items:center;gap:4px;font-size:15px;opacity:0.9;"><img src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22white%22%20d%3D%22m10.828%2012l4.95%204.95l-1.414%201.415L8%2012l6.364-6.364l1.414%201.414z%22%2F%3E%3C%2Fsvg%3E" style="width:24px;height:24px;"><span>\u8FD4\u56DE</span></div><div style="flex:1;text-align:center;font-size:17px;font-weight:600;">\u5929\u6C14</div><div style="width:60px;"></div></div><div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px;text-align:center;"><div style="margin-bottom:24px;opacity:0.8;">' + weatherSvg("sunny", 80, "%2356CCF2") + '</div><div style="font-size:18px;font-weight:600;margin-bottom:12px;">\u6682\u65E0\u5929\u6C14\u6570\u636E</div><div style="font-size:14px;opacity:0.7;line-height:1.6;">\u5F00\u59CB\u6E38\u620F\u540E\u5373\u53EF\u67E5\u770B\u5929\u6C14\u9884\u62A5</div></div></div>';
       return;
     }
     var currentWeather = data.current;
@@ -13375,7 +13440,7 @@ async function mount17(__landlordScope) {
     var html = '<div class="weather-app-container" style="height: 100%; overflow-y: auto; padding-top: 44px; box-sizing: border-box; background: ' + backgroundGradient + '; color: white; font-family: -apple-system, BlinkMacSystemFont, sans-serif;">';
     html += '<div style="display:flex;align-items:center;padding:12px 16px;position:relative;z-index:10;">';
     html += '<div onclick="goHome()" style="cursor:pointer;display:flex;align-items:center;gap:4px;font-size:15px;opacity:0.9;">';
-    html += '<img src="https://api.iconify.design/ri:arrow-left-s-line.svg?color=white" style="width:24px;height:24px;">';
+    html += '<img src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22white%22%20d%3D%22m10.828%2012l4.95%204.95l-1.414%201.415L8%2012l6.364-6.364l1.414%201.414z%22%2F%3E%3C%2Fsvg%3E" style="width:24px;height:24px;">';
     html += "<span>\u8FD4\u56DE</span>";
     html += "</div>";
     html += '<div style="flex:1;text-align:center;font-size:17px;font-weight:600;">\u5929\u6C14</div>';
@@ -13495,7 +13560,7 @@ async function mount17(__landlordScope) {
       __landlordScope.value("window").parent.PhoneSystem.registerApp({
         id: "weather",
         name: "\u5929\u6C14",
-        icon: '<img src="https://api.iconify.design/mdi:weather-partly-cloudy.svg?color=%234A90D9" style="width:28px;height:28px;">',
+        icon: '<img src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22%234A90D9%22%20d%3D%22M12.74%205.47c2.36%201.03%203.61%203.56%203.18%205.99A6%206%200%200%201%2018%2016v.17a3%203%200%200%201%201-.17a3%203%200%200%201%203%203a3%203%200%200%201-3%203H6a4%204%200%200%201-4-4a4%204%200%200%201%204-4h.27C5%2012.45%204.6%2010.24%205.5%208.26a5.49%205.49%200%200%201%207.24-2.79m-.81%201.83c-1.77-.8-3.84.01-4.62%201.77c-.46%201.02-.38%202.15.1%203.06A5.99%205.99%200%200%201%2012%2010c.7%200%201.38.12%202%20.34a3.51%203.51%200%200%200-2.07-3.04m1.62-3.66c-.55-.24-1.1-.41-1.67-.52l2.49-1.3l.9%202.89a7.7%207.7%200%200%200-1.72-1.07m-7.46.8c-.49.35-.92.75-1.29%201.19l.11-2.81l2.96.68c-.62.21-1.22.53-1.78.94M18%209.71c-.09-.59-.22-1.16-.41-1.71l2.38%201.5l-2.05%202.23c.11-.65.13-1.33.08-2.02M3.04%2011.3c.07.6.2%201.17.39%201.7l-2.37-1.5L3.1%209.28c-.1.65-.13%201.33-.06%202.02M19%2018h-3v-2a4%204%200%200%200-4-4a4%204%200%200%200-4%204H6a2%202%200%200%200-2%202a2%202%200%200%200%202%202h13a1%201%200%200%200%201-1a1%201%200%200%200-1-1%22%2F%3E%3C%2Fsvg%3E" style="width:28px;height:28px;">',
         order: 2,
         category: "system"
       });
@@ -13533,7 +13598,7 @@ async function mount18(__landlordScope) {
       __landlordScope.value("console").log("[\u65B0\u95FBAPP] PhoneSystem\u5DF2\u5C31\u7EEA\uFF0C\u5F00\u59CB\u521D\u59CB\u5316");
       const APP_ID = "news";
       const APP_NAME = "\u4ECA\u65E5\u5934\u6761";
-      const APP_ICON = '<img src="https://api.iconify.design/ri:newspaper-line.svg?color=white" style="width:70%;height:70%">';
+      const APP_ICON = '<img src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22white%22%20d%3D%22M16%2020V4H4v15a1%201%200%200%200%201%201zm3%202H5a3%203%200%200%201-3-3V3a1%201%200%200%201%201-1h14a1%201%200%200%201%201%201v7h4v9a3%203%200%200%201-3%203m-1-10v7a1%201%200%201%200%202%200v-7zM6%206h6v6H6zm2%202v2h2V8zm-2%205h8v2H6zm0%203h8v2H6z%22%2F%3E%3C%2Fsvg%3E" style="width:70%;height:70%">';
       const APP_COLOR = "linear-gradient(135deg, #ef4444, #dc2626)";
       function getNewsData() {
         return __landlordScope.value("window").parent.PhoneSystem?.newsSystem?.newsData || {
@@ -14064,12 +14129,12 @@ ${userMessage}
       return `
             <div class="chat-room-header">
                 <button class="chat-room-back" id="oc-btn-back">
-                    <img src="https://api.iconify.design/ri:arrow-left-s-line.svg" style="width:28px;height:28px;">
+                    <img src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22black%22%20d%3D%22m10.828%2012l4.95%204.95l-1.414%201.415L8%2012l6.364-6.364l1.414%201.414z%22%2F%3E%3C%2Fsvg%3E" style="width:28px;height:28px;">
                 </button>
                 <div class="chat-room-title">${OC_CONFIG.name}</div>
                 <div class="chat-room-actions">
                     <button class="chat-room-btn" id="oc-btn-clear" title="\u6E05\u7A7A\u804A\u5929\u8BB0\u5F55">
-                        <img src="https://api.iconify.design/ri:delete-bin-line.svg?color=%23666" style="width:20px;height:20px;">
+                        <img src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22%23666%22%20d%3D%22M17%206h5v2h-2v13a1%201%200%200%201-1%201H5a1%201%200%200%201-1-1V8H2V6h5V3a1%201%200%200%201%201-1h8a1%201%200%200%201%201%201zm1%202H6v12h12zm-9%203h2v6H9zm4%200h2v6h-2zM9%204v2h6V4z%22%2F%3E%3C%2Fsvg%3E" style="width:20px;height:20px;">
                     </button>
                 </div>
             </div>
@@ -14087,14 +14152,14 @@ ${userMessage}
     function generateMessageHTML(msg) {
       const isUser = msg.sender === "user";
       const avatarUrl = isUser ? getUserAvatarPath() : OC_CONFIG.avatar;
-      const defaultAvatar = isUser ? "https://api.iconify.design/ri:user-3-fill.svg?color=%23999" : OC_CONFIG.avatar;
+      const defaultAvatar = isUser ? "data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22%23999%22%20d%3D%22M20%2022H4v-2a5%205%200%200%201%205-5h6a5%205%200%200%201%205%205zm-8-9a6%206%200%201%201%200-12a6%206%200%200%201%200%2012%22%2F%3E%3C%2Fsvg%3E" : OC_CONFIG.avatar;
       return `
             <div class="chat-message ${isUser ? "self" : "other"}" data-msg-id="${msg.id}">
                 <div class="msg-avatar" style="background-image: url('${avatarUrl || defaultAvatar}'); background-size: cover;"></div>
                 <div class="msg-content-wrap">
                     <div class="msg-bubble">${escapeHtml(msg.content)}</div>
                     <div class="msg-retract-btn" data-msg-id="${msg.id}" title="\u5220\u9664\u6D88\u606F">
-                        <img src="https://api.iconify.design/ri:delete-back-2-line.svg?color=%23666666" style="width:10px;height:10px;">
+                        <img src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%3E%3Cpath%20fill%3D%22%23666666%22%20d%3D%22M6.535%203h14.464a1%201%200%200%201%201%201v16a1%201%200%200%201-1%201H6.535a1%201%200%200%201-.833-.445l-5.333-8a1%201%200%200%201%200-1.11l5.333-8A1%201%200%200%201%206.535%203m.535%202l-4.667%207l4.667%207H20V5zM13%2010.586l2.828-2.829l1.414%201.415L14.414%2012l2.828%202.828l-1.414%201.415l-2.829-2.829l-2.828%202.829l-1.414-1.415L11.585%2012L8.757%209.172l1.414-1.415z%22%2F%3E%3C%2Fsvg%3E" style="width:10px;height:10px;">
                     </div>
                 </div>
             </div>
@@ -15677,7 +15742,6 @@ async function mount21(__landlordScope) {
   function wsTypeIcon(type) {
     return wsIcon({ character: "user", room: "home", world: "globe", sticker: "smile" }[type] || "star", 14);
   }
-  const WS_ICON_API = "https://api.iconify.design/lucide:";
   const WS_ICON_MAP = {
     arrowLeft: "arrow-left",
     arrowRight: "arrow-right",
@@ -15703,7 +15767,7 @@ async function mount21(__landlordScope) {
   function wsIcon(name, size) {
     size = size || 16;
     var iconName = WS_ICON_MAP[name] || name;
-    return '<img src="' + WS_ICON_API + iconName + '.svg" width="' + size + '" height="' + size + '" style="display:inline-block;vertical-align:middle;flex-shrink:0;">';
+    return '<img src="' + __landlordScope.value("landlord").iconUrl("lucide:" + iconName) + '" width="' + size + '" height="' + size + '" style="display:inline-block;vertical-align:middle;flex-shrink:0;">';
   }
   let wsCurrentTab = "character";
   let wsBtnDragData = null;
@@ -24914,6 +24978,469 @@ var ModuleScope = class {
   }
 };
 
+// src/runtime/icons.json
+var icons_default = {
+  "lucide:alert-circle": {
+    body: '<g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/></g>',
+    width: 24,
+    height: 24
+  },
+  "lucide:alert-triangle": {
+    body: '<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m21.73 18l-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3M12 9v4m0 4h.01"/>',
+    width: 24,
+    height: 24
+  },
+  "lucide:arrow-left": {
+    body: '<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m12 19l-7-7l7-7m7 7H5"/>',
+    width: 24,
+    height: 24
+  },
+  "lucide:arrow-right": {
+    body: '<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14m-7-7l7 7l-7 7"/>',
+    width: 24,
+    height: 24
+  },
+  "lucide:ban": {
+    body: '<g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M4.929 4.929L19.07 19.071"/></g>',
+    width: 24,
+    height: 24
+  },
+  "lucide:bar-chart-2": {
+    body: '<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 21v-6m7 6V3m7 18V9"/>',
+    width: 24,
+    height: 24
+  },
+  "lucide:check": {
+    body: '<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 6L9 17l-5-5"/>',
+    width: 24,
+    height: 24
+  },
+  "lucide:check-circle": {
+    body: '<g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11l3 3L22 4"/></g>',
+    width: 24,
+    height: 24
+  },
+  "lucide:check-circle-2": {
+    body: '<g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m16 9l-5.5 5.5L8 12"/></g>',
+    width: 24,
+    height: 24
+  },
+  "lucide:chevron-down": {
+    body: '<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m6 9l6 6l6-6"/>',
+    width: 24,
+    height: 24
+  },
+  "lucide:circle-help": {
+    body: '<g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3m.08 4h.01"/></g>',
+    width: 24,
+    height: 24
+  },
+  "lucide:clipboard": {
+    body: '<g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></g>',
+    width: 24,
+    height: 24
+  },
+  "lucide:cloud": {
+    body: '<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9"/>',
+    width: 24,
+    height: 24
+  },
+  "lucide:cloud-download": {
+    body: '<g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M12 13v8l-4-4m4 4l4-4"/><path d="M4.393 15.269A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.436 8.284"/></g>',
+    width: 24,
+    height: 24
+  },
+  "lucide:cloud-upload": {
+    body: '<g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M12 13v8m-8-6.101A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="m8 17l4-4l4 4"/></g>',
+    width: 24,
+    height: 24
+  },
+  "lucide:code": {
+    body: '<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m16 18l6-6l-6-6M8 6l-6 6l6 6"/>',
+    width: 24,
+    height: 24
+  },
+  "lucide:download": {
+    body: '<g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M12 15V3m9 12v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10l5 5l5-5"/></g>',
+    width: 24,
+    height: 24
+  },
+  "lucide:eye": {
+    body: '<g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M2.062 12.348a1 1 0 0 1 0-.696a10.75 10.75 0 0 1 19.876 0a1 1 0 0 1 0 .696a10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></g>',
+    width: 24,
+    height: 24
+  },
+  "lucide:eye-off": {
+    body: '<g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575a1 1 0 0 1 0 .696a10.8 10.8 0 0 1-1.444 2.49m-6.41-.679a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151a1 1 0 0 1 0-.696a10.75 10.75 0 0 1 4.446-5.143M2 2l20 20"/></g>',
+    width: 24,
+    height: 24
+  },
+  "lucide:folder": {
+    body: '<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
+    width: 24,
+    height: 24
+  },
+  "lucide:globe": {
+    body: '<g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20a14.5 14.5 0 0 0 0-20M2 12h20"/></g>',
+    width: 24,
+    height: 24
+  },
+  "lucide:hammer": {
+    body: '<g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="m15 12l-9.373 9.373a1 1 0 0 1-3.001-3L12 9m6 6l4-4"/><path d="m21.5 11.5l-1.914-1.914A2 2 0 0 1 19 8.172v-.344a2 2 0 0 0-.586-1.414l-1.657-1.657A6 6 0 0 0 12.516 3H9l1.243 1.243A6 6 0 0 1 12 8.485V10l2 2h1.172a2 2 0 0 1 1.414.586L18.5 14.5"/></g>',
+    width: 24,
+    height: 24
+  },
+  "lucide:home": {
+    body: '<g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></g>',
+    width: 24,
+    height: 24
+  },
+  "lucide:image": {
+    body: '<g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15l-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></g>',
+    width: 24,
+    height: 24
+  },
+  "lucide:info": {
+    body: '<g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4m0-4h.01"/></g>',
+    width: 24,
+    height: 24
+  },
+  "lucide:layers": {
+    body: '<g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"/><path d="M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12"/><path d="M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17"/></g>',
+    width: 24,
+    height: 24
+  },
+  "lucide:list": {
+    body: '<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5h.01M3 12h.01M3 19h.01M8 5h13M8 12h13M8 19h13"/>',
+    width: 24,
+    height: 24
+  },
+  "lucide:loader-2": {
+    body: '<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 1 1-6.219-8.56"/>',
+    width: 24,
+    height: 24
+  },
+  "lucide:lock": {
+    body: '<g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></g>',
+    width: 24,
+    height: 24
+  },
+  "lucide:log-in": {
+    body: '<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m10 17l5-5l-5-5m5 5H3m12-9h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>',
+    width: 24,
+    height: 24
+  },
+  "lucide:log-out": {
+    body: '<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m16 17l5-5l-5-5m5 5H9m0 9H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>',
+    width: 24,
+    height: 24
+  },
+  "lucide:package": {
+    body: '<g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73zm1 .27V12"/><path d="M3.29 7L12 12l8.71-5M7.5 4.27l9 5.15"/></g>',
+    width: 24,
+    height: 24
+  },
+  "lucide:palette": {
+    body: '<g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M12 22a1 1 0 0 1 0-20a10 9 0 0 1 10 9a5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z"/><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/></g>',
+    width: 24,
+    height: 24
+  },
+  "lucide:pencil": {
+    body: '<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497zM15 5l4 4"/>',
+    width: 24,
+    height: 24
+  },
+  "lucide:plus": {
+    body: '<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14m-7-7v14"/>',
+    width: 24,
+    height: 24
+  },
+  "lucide:save": {
+    body: '<g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7M7 3v4a1 1 0 0 0 1 1h7"/></g>',
+    width: 24,
+    height: 24
+  },
+  "lucide:search": {
+    body: '<g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="m21 21l-4.34-4.34"/><circle cx="11" cy="11" r="8"/></g>',
+    width: 24,
+    height: 24
+  },
+  "lucide:shield": {
+    body: '<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>',
+    width: 24,
+    height: 24
+  },
+  "lucide:smartphone": {
+    body: '<g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><path d="M12 18h.01"/></g>',
+    width: 24,
+    height: 24
+  },
+  "lucide:smile": {
+    body: '<g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2s4-2 4-2M9 9h.01M15 9h.01"/></g>',
+    width: 24,
+    height: 24
+  },
+  "lucide:star": {
+    body: '<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.12 2.12 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.12 2.12 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.12 2.12 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.12 2.12 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.12 2.12 0 0 0 1.597-1.16z"/>',
+    width: 24,
+    height: 24
+  },
+  "lucide:trash-2": {
+    body: '<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 11v6m4-6v6m5-11v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+    width: 24,
+    height: 24
+  },
+  "lucide:upload": {
+    body: '<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v12m5-7l-5-5l-5 5m14 7v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>',
+    width: 24,
+    height: 24
+  },
+  "lucide:user": {
+    body: '<g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></g>',
+    width: 24,
+    height: 24
+  },
+  "lucide:user-plus": {
+    body: '<g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6m3-3h-6"/></g>',
+    width: 24,
+    height: 24
+  },
+  "lucide:x": {
+    body: '<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 6L6 18M6 6l12 12"/>',
+    width: 24,
+    height: 24
+  },
+  "lucide:x-circle": {
+    body: '<g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m15 9l-6 6m0-6l6 6"/></g>',
+    width: 24,
+    height: 24
+  },
+  "lucide:zap": {
+    body: '<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.914 4a1.5 1.5 0 0 0-2.474-1.561l-9 9A1.5 1.5 0 0 0 5.5 14h4.002a.5.5 0 0 1 .471.666L8.086 20a1.5 1.5 0 0 0 2.475 1.56l9-9A1.5 1.5 0 0 0 18.5 10h-3.997a.5.5 0 0 1-.472-.667z"/>',
+    width: 24,
+    height: 24
+  },
+  "mdi:calendar-week": {
+    body: '<path fill="currentColor" d="M6 1h2v2h8V1h2v2h1a2 2 0 0 1 2 2v14c0 1.11-.89 2-2 2H5a2 2 0 0 1-2-2V5c0-1.11.89-2 2-2h1zM5 8v11h14V8zm2 2h10v2H7z"/>',
+    width: 24,
+    height: 24
+  },
+  "mdi:clock-outline": {
+    body: '<path fill="currentColor" d="M12 20a8 8 0 0 0 8-8a8 8 0 0 0-8-8a8 8 0 0 0-8 8a8 8 0 0 0 8 8m0-18a10 10 0 0 1 10 10a10 10 0 0 1-10 10C6.47 22 2 17.5 2 12A10 10 0 0 1 12 2m.5 5v5.25l4.5 2.67l-.75 1.23L11 13V7z"/>',
+    width: 24,
+    height: 24
+  },
+  "mdi:cloud": {
+    body: '<path fill="currentColor" d="M6.5 20q-2.28 0-3.89-1.57Q1 16.85 1 14.58q0-1.95 1.17-3.48q1.18-1.53 3.08-1.95q.63-2.3 2.5-3.72Q9.63 4 12 4q2.93 0 4.96 2.04Q19 8.07 19 11q1.73.2 2.86 1.5q1.14 1.28 1.14 3q0 1.88-1.31 3.19T18.5 20Z"/>',
+    width: 24,
+    height: 24
+  },
+  "mdi:home-city": {
+    body: '<path fill="currentColor" d="M0 21V10l7.5-5l7.5 5v11h-5v-7H5v7zM24 2v19h-7V8.93l-1-.66V6h-2v.93l-4-2.66V2zm-3 12h-2v2h2zm0-4h-2v2h2zm0-4h-2v2h2z"/>',
+    width: 24,
+    height: 24
+  },
+  "mdi:snowflake": {
+    body: '<path fill="currentColor" d="m20.79 13.95l-2.33.62l-2-1.13v-2.88l2-1.13l2.33.62l.52-1.93l-1.77-.47l.46-1.77l-1.93-.52l-.62 2.33l-2 1.13L13 7.38V5.12l1.71-1.71L13.29 2L12 3.29L10.71 2L9.29 3.41L11 5.12v2.26L8.5 8.82l-2-1.13l-.58-2.33L4 5.88l.47 1.77l-1.77.47l.52 1.93l2.33-.62l2 1.13v2.89l-2 1.13l-2.33-.62l-.52 1.93l1.77.47L4 18.12l1.93.52l.62-2.33l2-1.13L11 16.62v2.26l-1.71 1.71L10.71 22L12 20.71L13.29 22l1.41-1.41l-1.7-1.71v-2.26l2.5-1.45l2 1.13l.62 2.33l1.88-.51l-.47-1.77l1.77-.47zM9.5 10.56L12 9.11l2.5 1.45v2.88L12 14.89l-2.5-1.45z"/>',
+    width: 24,
+    height: 24
+  },
+  "mdi:weather-cloudy": {
+    body: '<path fill="currentColor" d="M6 19a5 5 0 0 1-5-5a5 5 0 0 1 5-5c1-2.35 3.3-4 6-4c3.43 0 6.24 2.66 6.5 6.03L19 11a4 4 0 0 1 4 4a4 4 0 0 1-4 4zm13-6h-2v-1a5 5 0 0 0-5-5c-2.5 0-4.55 1.82-4.94 4.19C6.73 11.07 6.37 11 6 11a3 3 0 0 0-3 3a3 3 0 0 0 3 3h13a2 2 0 0 0 2-2a2 2 0 0 0-2-2"/>',
+    width: 24,
+    height: 24
+  },
+  "mdi:weather-fog": {
+    body: '<path fill="currentColor" d="M3 15h10a1 1 0 0 1 1 1a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1a1 1 0 0 1 1-1m13 0h5a1 1 0 0 1 1 1a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1a1 1 0 0 1 1-1M1 12a5 5 0 0 1 5-5c1-2.35 3.3-4 6-4c3.43 0 6.24 2.66 6.5 6.03L19 9c2.19 0 3.97 1.76 4 4h-2a2 2 0 0 0-2-2h-2v-1a5 5 0 0 0-5-5C9.5 5 7.45 6.82 7.06 9.19C6.73 9.07 6.37 9 6 9a3 3 0 0 0-3 3a3 3 0 0 0 .17 1H1.1zm2 7h2a1 1 0 0 1 1 1a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1a1 1 0 0 1 1-1m5 0h13a1 1 0 0 1 1 1a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1a1 1 0 0 1 1-1"/>',
+    width: 24,
+    height: 24
+  },
+  "mdi:weather-hazy": {
+    body: '<path fill="currentColor" d="m12 2l2.39 3.42C13.65 5.15 12.84 5 12 5s-1.65.15-2.39.42zM3.34 7l4.16-.35A7.2 7.2 0 0 0 5.94 8.5c-.44.74-.69 1.5-.83 2.29zm17.31 0l-1.77 3.79a7.02 7.02 0 0 0-2.38-4.15M14 15a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1m8 0a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1m-12 4a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1a1 1 0 0 0-1-1h-9a1 1 0 0 0-1 1m-7 0a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1m9-10a3 3 0 0 1 3 3h2a5 5 0 0 0-5-5a5 5 0 0 0-5 5h2a3 3 0 0 1 3-3"/>',
+    width: 24,
+    height: 24
+  },
+  "mdi:weather-lightning": {
+    body: '<path fill="currentColor" d="M6 16a5 5 0 0 1-5-5a5 5 0 0 1 5-5c1-2.35 3.3-4 6-4c3.43 0 6.24 2.66 6.5 6.03L19 8a4 4 0 0 1 4 4a4 4 0 0 1-4 4h-1a1 1 0 0 1-1-1a1 1 0 0 1 1-1h1a2 2 0 0 0 2-2a2 2 0 0 0-2-2h-2V9a5 5 0 0 0-5-5C9.5 4 7.45 5.82 7.06 8.19C6.73 8.07 6.37 8 6 8a3 3 0 0 0-3 3a3 3 0 0 0 3 3h1a1 1 0 0 1 1 1a1 1 0 0 1-1 1zm6-5h3l-2 4h2l-3.75 7l.75-5H9.5z"/>',
+    width: 24,
+    height: 24
+  },
+  "mdi:weather-lightning-rainy": {
+    body: '<path fill="currentColor" d="M4.5 13.59c.5.28.64.91.37 1.37c-.28.48-.87.64-1.37.37A4.98 4.98 0 0 1 1 11a5 5 0 0 1 5-5c1-2.35 3.3-4 6-4c3.43 0 6.24 2.66 6.5 6.03L19 8a4 4 0 0 1 4 4a4 4 0 0 1-4 4a1 1 0 0 1-1-1a1 1 0 0 1 1-1a2 2 0 0 0 2-2a2 2 0 0 0-2-2h-2V9a5 5 0 0 0-5-5C9.5 4 7.45 5.82 7.06 8.19C6.73 8.07 6.37 8 6 8a3 3 0 0 0-3 3c0 1.11.6 2.08 1.5 2.6zm5-2.59h3l-2 4h2l-3.75 7l.75-5H7zm8 7.67c0 1.29-1 2.33-2.25 2.33S13 19.96 13 18.67c0-1.55 2.25-4.17 2.25-4.17s2.25 2.62 2.25 4.17"/>',
+    width: 24,
+    height: 24
+  },
+  "mdi:weather-partly-cloudy": {
+    body: '<path fill="currentColor" d="M12.74 5.47c2.36 1.03 3.61 3.56 3.18 5.99A6 6 0 0 1 18 16v.17a3 3 0 0 1 1-.17a3 3 0 0 1 3 3a3 3 0 0 1-3 3H6a4 4 0 0 1-4-4a4 4 0 0 1 4-4h.27C5 12.45 4.6 10.24 5.5 8.26a5.49 5.49 0 0 1 7.24-2.79m-.81 1.83c-1.77-.8-3.84.01-4.62 1.77c-.46 1.02-.38 2.15.1 3.06A5.99 5.99 0 0 1 12 10c.7 0 1.38.12 2 .34a3.51 3.51 0 0 0-2.07-3.04m1.62-3.66c-.55-.24-1.1-.41-1.67-.52l2.49-1.3l.9 2.89a7.7 7.7 0 0 0-1.72-1.07m-7.46.8c-.49.35-.92.75-1.29 1.19l.11-2.81l2.96.68c-.62.21-1.22.53-1.78.94M18 9.71c-.09-.59-.22-1.16-.41-1.71l2.38 1.5l-2.05 2.23c.11-.65.13-1.33.08-2.02M3.04 11.3c.07.6.2 1.17.39 1.7l-2.37-1.5L3.1 9.28c-.1.65-.13 1.33-.06 2.02M19 18h-3v-2a4 4 0 0 0-4-4a4 4 0 0 0-4 4H6a2 2 0 0 0-2 2a2 2 0 0 0 2 2h13a1 1 0 0 0 1-1a1 1 0 0 0-1-1"/>',
+    width: 24,
+    height: 24
+  },
+  "mdi:weather-pouring": {
+    body: '<path fill="currentColor" d="M9 12c.53.14.85.69.71 1.22l-1.3 4.83c-.14.54-.69.85-1.22.71a.967.967 0 0 1-.69-1.22l1.28-4.83c.14-.54.69-.85 1.22-.71m4 0c.53.14.85.69.71 1.22l-2.07 7.73c-.14.55-.69.85-1.23.71c-.53-.16-.85-.69-.71-1.23l2.08-7.72c.14-.54.69-.85 1.22-.71m4 0c.53.14.85.69.71 1.22l-1.3 4.83c-.14.54-.69.85-1.22.71a.967.967 0 0 1-.69-1.22l1.28-4.83c.14-.54.69-.85 1.22-.71m0-2V9a5 5 0 0 0-5-5C9.5 4 7.45 5.82 7.06 8.19C6.73 8.07 6.37 8 6 8a3 3 0 0 0-3 3c0 1.11.6 2.08 1.5 2.6v-.01c.5.28.64.91.37 1.37c-.28.47-.87.64-1.37.36v.01A4.98 4.98 0 0 1 1 11a5 5 0 0 1 5-5c1-2.35 3.3-4 6-4c3.43 0 6.24 2.66 6.5 6.03L19 8a4 4 0 0 1 4 4c0 1.5-.8 2.77-2 3.46c-.5.27-1.09.11-1.37-.37c-.27-.48-.13-1.09.37-1.37v.01c.6-.34 1-.99 1-1.73a2 2 0 0 0-2-2z"/>',
+    width: 24,
+    height: 24
+  },
+  "mdi:weather-rainy": {
+    body: '<path fill="currentColor" d="M6 14.03a1 1 0 0 1 1 1c0 .55-.45 1-1 1c-2.76 0-5-2.24-5-5s2.24-5 5-5c1-2.35 3.3-4 6-4c3.43 0 6.24 2.66 6.5 6.03l.5-.03a4 4 0 0 1 4 4c0 2.2-1.79 4-4 4h-1c-.55 0-1-.45-1-1c0-.56.45-1 1-1h1a2 2 0 0 0 2-2a2 2 0 0 0-2-2h-2v-1c0-2.76-2.24-5-5-5c-2.5 0-4.55 1.81-4.94 4.18c-.33-.12-.69-.18-1.06-.18a3 3 0 0 0-3 3a3 3 0 0 0 3 3m6 .12c.18.24.37.51.56.79C13 15.56 14 17.03 14 18a2 2 0 0 1-2 2a2 2 0 0 1-2-2c0-.97 1-2.44 1.44-3.06c.19-.28.38-.54.56-.79m0-3.12l-.5.56s-.85.96-1.71 2.22C8.93 15.06 8 16.56 8 18a4 4 0 0 0 4 4a4 4 0 0 0 4-4c0-1.44-.93-2.94-1.79-4.19c-.86-1.26-1.71-2.22-1.71-2.22"/>',
+    width: 24,
+    height: 24
+  },
+  "mdi:weather-snowy": {
+    body: '<path fill="currentColor" d="M6 14a1 1 0 0 1 1 1a1 1 0 0 1-1 1a5 5 0 0 1-5-5a5 5 0 0 1 5-5c1-2.35 3.3-4 6-4c3.43 0 6.24 2.66 6.5 6.03L19 8a4 4 0 0 1 4 4a4 4 0 0 1-4 4h-1a1 1 0 0 1-1-1a1 1 0 0 1 1-1h1a2 2 0 0 0 2-2a2 2 0 0 0-2-2h-2V9a5 5 0 0 0-5-5C9.5 4 7.45 5.82 7.06 8.19C6.73 8.07 6.37 8 6 8a3 3 0 0 0-3 3a3 3 0 0 0 3 3m1.88 4.07l2.19-.57l-1.61-1.62c-.39-.38-.39-1.02 0-1.42c.39-.39 1.04-.39 1.42 0l1.62 1.61l.57-2.19a1 1 0 1 1 1.93.52l-.59 2.19L15.6 16a1 1 0 1 1 .52 1.93l-2.19.57l1.61 1.62c.39.38.39 1.03 0 1.42s-1.04.39-1.42 0l-1.62-1.61l-.57 2.19A1 1 0 1 1 10 21.6l.59-2.19L8.4 20a1 1 0 1 1-.52-1.93"/>',
+    width: 24,
+    height: 24
+  },
+  "mdi:weather-snowy-heavy": {
+    body: '<path fill="currentColor" d="M4 16.36c-.14-.54.18-1.11.73-1.25L7 14.5l-1.67-1.64c-.4-.4-.4-1.05 0-1.46c.4-.4 1.07-.4 1.46 0l1.66 1.65l.59-2.25c.14-.56.71-.88 1.25-.73c.56.14.88.71.71 1.26l-.58 2.25l2.25-.58a.99.99 0 0 1 1.26.71c.15.54-.17 1.11-.73 1.25l-2.25.59l1.65 1.66c.4.39.4 1.06 0 1.46s-1.06.4-1.45 0L9.5 17l-.61 2.27c-.14.56-.71.87-1.25.73c-.56-.14-.87-.71-.73-1.26l.59-2.24l-2.24.59c-.55.14-1.12-.17-1.26-.73M1 10a5 5 0 0 1 5-5c1-2.35 3.3-4 6-4c3.43 0 6.24 2.66 6.5 6.03L19 7a4 4 0 0 1 4 4a4 4 0 0 1-4 4a1 1 0 0 1-1-1a1 1 0 0 1 1-1a2 2 0 0 0 2-2a2 2 0 0 0-2-2h-2V8a5 5 0 0 0-5-5C9.5 3 7.45 4.82 7.06 7.19C6.73 7.07 6.37 7 6 7a3 3 0 0 0-3 3c0 .85.35 1.61.91 2.16c.36.39.35 1-.03 1.38a.996.996 0 0 1-1.41 0A5 5 0 0 1 1 10m13.03 10.43c.1.39.47.61.88.51l1.59-.44l-.44 1.59c-.1.41.12.78.51.88c.38.11.78-.12.88-.51l.41-1.57l1.17 1.16c.27.28.74.28 1.02 0s.28-.75 0-1.02l-1.16-1.17l1.57-.41c.39-.1.62-.5.51-.88c-.1-.39-.47-.61-.88-.51l-1.59.44l.44-1.59c.1-.41-.12-.78-.51-.88a.71.71 0 0 0-.88.51l-.41 1.57l-1.17-1.16a.724.724 0 0 0-1.02 0c-.28.29-.28.75 0 1.02l1.16 1.17l-1.57.41c-.39.1-.62.5-.51.88"/>',
+    width: 24,
+    height: 24
+  },
+  "mdi:weather-sunny": {
+    body: '<path fill="currentColor" d="M12 7a5 5 0 0 1 5 5a5 5 0 0 1-5 5a5 5 0 0 1-5-5a5 5 0 0 1 5-5m0 2a3 3 0 0 0-3 3a3 3 0 0 0 3 3a3 3 0 0 0 3-3a3 3 0 0 0-3-3m0-7l2.39 3.42C13.65 5.15 12.84 5 12 5s-1.65.15-2.39.42zM3.34 7l4.16-.35A7.2 7.2 0 0 0 5.94 8.5c-.44.74-.69 1.5-.83 2.29zm.02 10l1.76-3.77a7.13 7.13 0 0 0 2.38 4.14zM20.65 7l-1.77 3.79a7.02 7.02 0 0 0-2.38-4.15zm-.01 10l-4.14.36c.59-.51 1.12-1.14 1.54-1.86c.42-.73.69-1.5.83-2.29zM12 22l-2.41-3.44c.74.27 1.55.44 2.41.44c.82 0 1.63-.17 2.37-.44z"/>',
+    width: 24,
+    height: 24
+  },
+  "ri:add-line": {
+    body: '<path fill="currentColor" d="M11 11V5h2v6h6v2h-6v6h-2v-6H5v-2z"/>',
+    width: 24,
+    height: 24
+  },
+  "ri:arrow-left-s-line": {
+    body: '<path fill="currentColor" d="m10.828 12l4.95 4.95l-1.414 1.415L8 12l6.364-6.364l1.414 1.414z"/>',
+    width: 24,
+    height: 24
+  },
+  "ri:bug-fill": {
+    body: '<path fill="currentColor" d="M6.056 8.3a7 7 0 0 1 .199-.3h11.49q.103.148.199.3l2.02-1.166l1 1.732l-2.213 1.278c.162.59.249 1.213.249 1.856v1h3v2h-3a7 7 0 0 1-.536 2.69l2.5 1.444l-1 1.732l-2.526-1.458A7 7 0 0 1 13 21.929V14h-2v7.93a7 7 0 0 1-4.438-2.522l-2.526 1.458l-1-1.732l2.5-1.443A7 7 0 0 1 5 15H2v-2h3v-1c0-.643.087-1.265.249-1.856L3.036 8.866l1-1.732zM8 6a4 4 0 1 1 8 0z"/>',
+    width: 24,
+    height: 24
+  },
+  "ri:building-4-fill": {
+    body: '<path fill="currentColor" d="M21 20h2v2H1v-2h2V3a1 1 0 0 1 1-1h16a1 1 0 0 1 1 1zM8 11v2h3v-2zm0-4v2h3V7zm0 8v2h3v-2zm5 0v2h3v-2zm0-4v2h3v-2zm0-4v2h3V7z"/>',
+    width: 24,
+    height: 24
+  },
+  "ri:chat-1-line": {
+    body: '<path fill="currentColor" d="M10 3h4a8 8 0 1 1 0 16v3.5c-5-2-12-5-12-11.5a8 8 0 0 1 8-8m2 14h2a6 6 0 0 0 0-12h-4a6 6 0 0 0-6 6c0 3.61 2.462 5.966 8 8.48z"/>',
+    width: 24,
+    height: 24
+  },
+  "ri:chat-check-line": {
+    body: '<path fill="currentColor" d="M6.455 19L2 22.5V4a1 1 0 0 1 1-1h18a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1zm-.692-2H20V5H4v13.385zm5.53-4.879l4.243-4.242l1.414 1.414l-5.657 5.657l-3.89-3.89l1.415-1.414z"/>',
+    width: 24,
+    height: 24
+  },
+  "ri:chat-smile-3-line": {
+    body: '<path fill="currentColor" d="M2 12C2 6.477 6.477 2 12 2s10 4.477 10 10s-4.477 10-10 10H2l2.929-2.929A9.97 9.97 0 0 1 2 12m4.828 8H12a8 8 0 1 0-8-8c0 2.152.851 4.165 2.343 5.657l1.414 1.414zM8 13h8a4 4 0 0 1-8 0"/>',
+    width: 24,
+    height: 24
+  },
+  "ri:delete-back-2-line": {
+    body: '<path fill="currentColor" d="M6.535 3h14.464a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H6.535a1 1 0 0 1-.833-.445l-5.333-8a1 1 0 0 1 0-1.11l5.333-8A1 1 0 0 1 6.535 3m.535 2l-4.667 7l4.667 7H20V5zM13 10.586l2.828-2.829l1.414 1.415L14.414 12l2.828 2.828l-1.414 1.415l-2.829-2.829l-2.828 2.829l-1.414-1.415L11.585 12L8.757 9.172l1.414-1.415z"/>',
+    width: 24,
+    height: 24
+  },
+  "ri:delete-bin-line": {
+    body: '<path fill="currentColor" d="M17 6h5v2h-2v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V8H2V6h5V3a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1zm1 2H6v12h12zm-9 3h2v6H9zm4 0h2v6h-2zM9 4v2h6V4z"/>',
+    width: 24,
+    height: 24
+  },
+  "ri:earth-fill": {
+    body: '<path fill="currentColor" d="M12 2c5.523 0 10 4.477 10 10s-4.477 10-10 10S2 17.523 2 12S6.477 2 12 2m4.004 10.878c-.345-.525-.594-.903-1.542-.753c-1.79.284-1.989.597-2.074 1.113l-.024.156l-.025.166c-.097.683-.094.941.22 1.27c1.265 1.328 2.023 2.285 2.253 2.845c.112.273.4 1.1.202 1.918a8.2 8.2 0 0 0 3.151-2.237c.11-.374.19-.84.19-1.404v-.105c0-.922 0-1.343-.652-1.716a7 7 0 0 0-.645-.325c-.367-.167-.61-.276-.938-.756q-.06-.085-.116-.172M12 3.833c-2.317 0-4.41.966-5.896 2.516c.177.123.331.296.437.534c.204.457.204.928.204 1.345c0 .328 0 .64.105.865c.144.308.766.44 1.315.554c.197.042.399.084.583.135c.506.14.898.595 1.211.96c.13.151.323.374.42.43c.05-.036.211-.211.29-.498c.062-.22.044-.414-.045-.52c-.56-.66-.529-1.93-.356-2.399c.272-.739 1.122-.684 1.744-.644c.232.015.45.03.614.009c.622-.078.814-1.025.949-1.21c.292-.4 1.186-1.003 1.74-1.375A8.1 8.1 0 0 0 12 3.833"/>',
+    width: 24,
+    height: 24
+  },
+  "ri:emotion-line": {
+    body: '<path fill="currentColor" d="M12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10s-4.477 10-10 10m0-2a8 8 0 1 0 0-16a8 8 0 0 0 0 16m-4-7h8a4 4 0 0 1-8 0m0-2a1.5 1.5 0 1 1 0-3a1.5 1.5 0 0 1 0 3m8 0a1.5 1.5 0 1 1 0-3a1.5 1.5 0 0 1 0 3"/>',
+    width: 24,
+    height: 24
+  },
+  "ri:emotion-sad-line": {
+    body: '<path fill="currentColor" d="M12 2c5.523 0 10 4.477 10 10c0 .727-.078 1.435-.225 2.118l-1.782-1.783Q20 12.17 20 12a8 8 0 1 0-4.381 7.137q.232.37.553.691c.302.303.64.547 1.001.732A9.96 9.96 0 0 1 12 22C6.477 22 2 17.523 2 12S6.477 2 12 2m7 12.172l1.414 1.414a2 2 0 1 1-2.93.11l.102-.11zM12 15c1.466 0 2.785.631 3.7 1.637l-.945.86C13.965 17.182 13.018 17 12 17s-1.965.183-2.755.496l-.945-.86A5 5 0 0 1 12 15m-3.5-5a1.5 1.5 0 1 1 0 3a1.5 1.5 0 0 1 0-3m7 0a1.5 1.5 0 1 1 0 3a1.5 1.5 0 0 1 0-3"/>',
+    width: 24,
+    height: 24
+  },
+  "ri:group-fill": {
+    body: '<path fill="currentColor" d="M2 22a8 8 0 1 1 16 0zm8-9c-3.315 0-6-2.685-6-6s2.685-6 6-6s6 2.685 6 6s-2.685 6-6 6m7.363 2.233A7.505 7.505 0 0 1 22.983 22H20c0-2.61-1-4.986-2.637-6.767m-2.023-2.276A7.98 7.98 0 0 0 18 7a7.96 7.96 0 0 0-1.015-3.903A5 5 0 0 1 21 8a5 5 0 0 1-5.66 4.957"/>',
+    width: 24,
+    height: 24
+  },
+  "ri:map-2-fill": {
+    body: '<path fill="currentColor" d="m2 5l7-3l6 3l6.303-2.701a.5.5 0 0 1 .697.46V19l-7 3l-6-3l-6.303 2.701a.5.5 0 0 1-.697-.46zm13 14.764V7.176l-.065.028L9 4.236v12.588l.065-.028z"/>',
+    width: 24,
+    height: 24
+  },
+  "ri:mic-line": {
+    body: '<path fill="currentColor" d="M12 3a3 3 0 0 0-3 3v4a3 3 0 1 0 6 0V6a3 3 0 0 0-3-3m0-2a5 5 0 0 1 5 5v4a5 5 0 0 1-10 0V6a5 5 0 0 1 5-5M3.055 11H5.07a7.002 7.002 0 0 0 13.858 0h2.016A9.004 9.004 0 0 1 13 18.945V23h-2v-4.055A9.004 9.004 0 0 1 3.055 11"/>',
+    width: 24,
+    height: 24
+  },
+  "ri:netease-cloud-music-fill": {
+    body: '<path fill="currentColor" d="M12.001 22c-5.523 0-10-4.477-10-10s4.477-10 10-10s10 4.477 10 10s-4.477 10-10 10m-1.086-10.432c.24-.84 1.075-1.541 1.99-1.648c.187.694.388 1.373.545 2.063c.053.23.037.495-.018.727c-.213.892-1.248 1.242-1.978.685c-.53-.405-.742-1.12-.539-1.827m3.817-.197c-.125-.465-.256-.927-.393-1.42c.5.13.907.36 1.255.697c1.257 1.222 1.385 3.3.294 4.732c-1.135 1.49-3.155 2.134-5.028 1.605c-2.302-.65-3.808-2.952-3.441-5.316c.274-1.768 1.27-3.004 2.9-3.733c.407-.182.58-.56.42-.93c-.157-.364-.54-.504-.944-.343c-2.721 1.088-4.32 4.134-3.67 6.987c.713 3.118 3.495 5.163 6.675 4.859c1.732-.166 3.164-.948 4.216-2.347c1.506-2.002 1.297-4.783-.463-6.499c-.666-.65-1.471-1.018-2.39-1.153c-.083-.013-.217-.052-.232-.106c-.087-.313-.18-.632-.206-.954c-.029-.357.29-.64.65-.645c.253-.003.434.13.603.3c.303.3.704.322.988.062c.29-.264.296-.678.018-1.008c-.566-.672-1.586-.891-2.43-.523c-.847.37-1.321 1.187-1.2 2.093c.038.28.11.557.167.842l-.26.072a3.86 3.86 0 0 0-2.098 1.414c-.921 1.22-.936 2.828-.041 3.947c1.274 1.594 3.747 1.284 4.523-.568c.284-.677.275-1.368.087-2.065"/>',
+    width: 24,
+    height: 24
+  },
+  "ri:newspaper-line": {
+    body: '<path fill="currentColor" d="M16 20V4H4v15a1 1 0 0 0 1 1zm3 2H5a3 3 0 0 1-3-3V3a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v7h4v9a3 3 0 0 1-3 3m-1-10v7a1 1 0 1 0 2 0v-7zM6 6h6v6H6zm2 2v2h2V8zm-2 5h8v2H6zm0 3h8v2H6z"/>',
+    width: 24,
+    height: 24
+  },
+  "ri:settings-3-line": {
+    body: '<path fill="currentColor" d="M3.34 17a10 10 0 0 1-.979-2.326a3 3 0 0 0 .003-5.347a10 10 0 0 1 2.5-4.337a3 3 0 0 0 4.632-2.674a10 10 0 0 1 5.007.003a3 3 0 0 0 4.632 2.671a10.06 10.06 0 0 1 2.503 4.336a3 3 0 0 0-.002 5.347a10 10 0 0 1-2.501 4.337a3 3 0 0 0-4.632 2.674a10 10 0 0 1-5.007-.002a3 3 0 0 0-4.631-2.672A10 10 0 0 1 3.339 17m5.66.196a5 5 0 0 1 2.25 2.77q.75.07 1.499.002a5 5 0 0 1 2.25-2.772a5 5 0 0 1 3.526-.564q.435-.614.748-1.298A5 5 0 0 1 18 12c0-1.26.47-2.437 1.273-3.334a8 8 0 0 0-.75-1.298A5 5 0 0 1 15 6.804a5 5 0 0 1-2.25-2.77q-.75-.071-1.5-.001A5 5 0 0 1 9 6.804a5 5 0 0 1-3.526.564q-.436.614-.747 1.298A5 5 0 0 1 6 12c0 1.26-.471 2.437-1.273 3.334a8 8 0 0 0 .75 1.298A5 5 0 0 1 9 17.196M12 15a3 3 0 1 1 0-6a3 3 0 0 1 0 6m0-2a1 1 0 1 0 0-2a1 1 0 0 0 0 2"/>',
+    width: 24,
+    height: 24
+  },
+  "ri:user-3-fill": {
+    body: '<path fill="currentColor" d="M20 22H4v-2a5 5 0 0 1 5-5h6a5 5 0 0 1 5 5zm-8-9a6 6 0 1 1 0-12a6 6 0 0 1 0 12"/>',
+    width: 24,
+    height: 24
+  },
+  "ri:user-3-line": {
+    body: '<path fill="currentColor" d="M20 22h-2v-2a3 3 0 0 0-3-3H9a3 3 0 0 0-3 3v2H4v-2a5 5 0 0 1 5-5h6a5 5 0 0 1 5 5zm-8-9a6 6 0 1 1 0-12a6 6 0 0 1 0 12m0-2a4 4 0 1 0 0-8a4 4 0 0 0 0 8"/>',
+    width: 24,
+    height: 24
+  },
+  "ri:user-star-fill": {
+    body: '<path fill="currentColor" d="M12 14v8H4a8 8 0 0 1 8-8m6 7.5l-2.939 1.545l.561-3.273l-2.377-2.317l3.286-.477L18 14l1.47 2.977l3.285.478l-2.377 2.318l.56 3.272zM12 13c-3.315 0-6-2.685-6-6s2.685-6 6-6s6 2.685 6 6s-2.685 6-6 6"/>',
+    width: 24,
+    height: 24
+  },
+  "ri:user-star-line": {
+    body: '<path fill="currentColor" d="M12 14v2a6 6 0 0 0-6 6H4a8 8 0 0 1 8-8m0-1c-3.315 0-6-2.685-6-6s2.685-6 6-6s6 2.685 6 6s-2.685 6-6 6m0-2c2.21 0 4-1.79 4-4s-1.79-4-4-4s-4 1.79-4 4s1.79 4 4 4m6 10.5l-2.939 1.545l.561-3.273l-2.377-2.317l3.286-.477L18 14l1.47 2.977l3.285.478l-2.377 2.318l.56 3.272z"/>',
+    width: 24,
+    height: 24
+  },
+  "ri:wechat-fill": {
+    body: '<path fill="currentColor" d="M18.575 13.711a.91.91 0 0 0 .898-.898a.895.895 0 0 0-.898-.898a.894.894 0 0 0-.898.898c0 .5.4.898.898.898m-4.425 0a.91.91 0 0 0 .898-.898c0-.498-.4-.898-.898-.898a.894.894 0 0 0-.898.898c0 .5.399.898.898.898m6.567 5.04a.35.35 0 0 0-.172.37c0 .048 0 .098.025.147c.098.417.294 1.081.294 1.106c0 .073.025.122.025.172a.22.22 0 0 1-.221.22c-.05 0-.074-.024-.123-.048l-1.449-.836a.8.8 0 0 0-.344-.098c-.073 0-.147 0-.196.024c-.688.197-1.4.295-2.161.295c-3.66 0-6.607-2.457-6.607-5.505s2.947-5.505 6.607-5.505c3.659 0 6.606 2.458 6.606 5.505c0 1.647-.884 3.146-2.284 4.154M16.674 8.099a9 9 0 0 0-.28-.005c-4.174 0-7.606 2.86-7.606 6.505c0 .554.08 1.09.228 1.6h-.089a10 10 0 0 1-2.584-.368c-.074-.025-.148-.025-.222-.025a.83.83 0 0 0-.419.123l-1.747 1.005a.35.35 0 0 1-.148.05a.273.273 0 0 1-.27-.27c0-.074.024-.123.049-.197c.024-.024.246-.834.369-1.324c0-.05.024-.123.024-.172a.56.56 0 0 0-.221-.441C2.059 13.376 1 11.586 1 9.599C1.001 5.944 4.571 3 8.951 3c3.765 0 6.93 2.169 7.723 5.098m-5.154.418c.573 0 1.026-.477 1.026-1.026c0-.573-.453-1.026-1.026-1.026s-1.026.453-1.026 1.026s.453 1.026 1.026 1.026m-5.26 0c.573 0 1.027-.477 1.027-1.026c0-.573-.454-1.026-1.027-1.026c-.572 0-1.026.453-1.026 1.026s.454 1.026 1.026 1.026"/>',
+    width: 24,
+    height: 24
+  }
+};
+
+// src/runtime/icons.js
+var cache = /* @__PURE__ */ new Map();
+function hasBuiltinIcon(name) {
+  return Object.hasOwn(icons_default, name);
+}
+function iconUrl(name, color = "black") {
+  let tint;
+  try {
+    tint = decodeURIComponent(String(color));
+  } catch {
+    tint = "black";
+  }
+  if (!/^(?:[a-z]+|#[a-f\d]{3,8}|rgba?\([\d.,%\s]+\))$/i.test(tint)) tint = "black";
+  const resolved = hasBuiltinIcon(name) ? name : "lucide:circle-help";
+  const key = `${resolved}:${tint}`;
+  if (cache.has(key)) return cache.get(key);
+  const icon = icons_default[resolved];
+  const body = icon.body.replaceAll("currentColor", tint);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${icon.width}" height="${icon.height}" viewBox="0 0 ${icon.width} ${icon.height}">${body}</svg>`;
+  const result = `data:image/svg+xml,${encodeURIComponent(svg).replaceAll("'", "%27")}`;
+  cache.set(key, result);
+  return result;
+}
+
 // src/runtime/coordination.js
 var SerialQueue = class {
   constructor() {
@@ -25043,8 +25570,23 @@ async function waitUntil(get, { signal, timeout = 2e4, interval = 25 } = {}) {
   }
 }
 
+// src/runtime/viewport-panel.js
+function mountViewportPanel(host, panel, zIndex) {
+  const doc = host.document;
+  const id = `${panel.id}-viewport`;
+  doc.getElementById(id)?.remove();
+  const layer = doc.createElement("div");
+  layer.id = id;
+  layer.style.cssText = `position:fixed;top:0;left:0;width:100%;height:100vh;height:100dvh;pointer-events:none;z-index:${zIndex};`;
+  panel.style.position = "absolute";
+  panel.style.pointerEvents = "auto";
+  layer.append(panel);
+  doc.body.append(layer);
+  return () => layer.remove();
+}
+
 // src/runtime/entry.js
-var VERSION = "5.21.0-rc.3";
+var VERSION = "5.21.0-rc.4";
 var ORDERS = {
   original: ["S02", "S04", "S07", "S08", "S06", "S09", "S10", "S11", "S12", "S13", "S14", "S15", "S16", "S17", "S18", "S19", "S20", "S21", "S22", "S23"],
   remix: ["S02", "S25", "S26", "S27", "S28", "S29", "S23"]
@@ -25108,6 +25650,7 @@ var LandlordRuntime = class {
   }
   forScope(scope) {
     return {
+      iconUrl,
       assertCurrent: () => scope.assertActive(),
       registerSchema: (register, schema) => {
         const original = this.helper.eventOn;
@@ -25229,6 +25772,8 @@ var LandlordRuntime = class {
     for (const scope of this.scopes) scope.controller.abort();
     for (const scope of [...this.scopes].reverse()) await scope.dispose();
     this.scopes.length = 0;
+    this.removeControls?.();
+    this.removeControls = null;
     this.host.document.getElementById("landlord-controls")?.remove();
     this.host.getApartmentBedrooms = () => this.getBedrooms();
   }
@@ -25243,6 +25788,7 @@ var LandlordRuntime = class {
   }
   addControls() {
     const doc = this.host.document;
+    this.removeControls?.();
     doc.getElementById("landlord-controls")?.remove();
     const box = doc.createElement("details");
     box.id = "landlord-controls";
@@ -25276,7 +25822,11 @@ var LandlordRuntime = class {
     const note = doc.createElement("p");
     note.textContent = "\u53D1\u5E03\u7248\u672C\u5728\u5DE6\u4E0B\u89D2\u201C\u7248\u672C\u4E0E\u66F4\u65B0\u201D\u4E2D\u9009\u62E9\uFF1B\u6E38\u73A9\u8FC7\u7A0B\u4E2D\u4FDD\u6301\u5F53\u524D\u7248\u672C\u3002";
     box.append(note);
-    doc.body.append(box);
+    box.style.boxSizing = "border-box";
+    box.style.maxWidth = "min(320px, calc(100vw - 24px))";
+    box.style.maxHeight = "calc(100dvh - 24px)";
+    box.style.overflowY = "auto";
+    this.removeControls = mountViewportPanel(this.host, box, 100001);
   }
   async recoverOpening() {
     if (!this.store) return;

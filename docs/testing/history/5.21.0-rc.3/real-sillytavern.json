@@ -1,5 +1,5 @@
 {
-  "date": "2026-09-07T07:10:48.494Z",
+  "date": "2026-09-07T06:44:04.781Z",
   "sillytavern": {
     "version": "1.18.0",
     "commit": "8172dcd0ee672d3cd9a5e5f7af134f91a45cd2b8"
@@ -8,16 +8,9 @@
     "version": "4.9.5",
     "commit": "8e0f4324e7d051025a333831411f03bd3145fac8"
   },
-  "isolation": {
-    "port": 52499,
-    "ownProcessStartupVerified": true
-  },
   "checks": [
-    "fresh data root and an available loopback port; only our child process announces readiness before any HTTP request",
     "single imported script, original 20 modules, real MVU initialized",
     "new chat and live character worldbook contain no retired gameplay state or rules",
-    "version and mode controls are visible, fully within 633×696 and clickable under the real transformed html; latest-release choice and chat input are accessible",
-    "Iconify is blocked; every floating menu image decodes from bundled SVG and the apartment icon opens the real apartment with visible action icons",
     "in-game mode button switches to remix with 7 modules",
     "in-card version selector pins the current release via official helper iframe reload, preserving the open chat, remix mode and one script",
     "in-card version selector restores automatic formal-release tracking via helper iframe reload without host navigation",
@@ -27,7 +20,6 @@
     "no runtime/page errors, no paid API requests, one helper script remains"
   ],
   "paidApiCalls": 0,
-  "blockedIconifyRequests": 0,
-  "version": "5.21.0-rc.4",
+  "version": "5.21.0-rc.3",
   "result": "passed"
 }

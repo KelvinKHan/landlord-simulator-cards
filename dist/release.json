@@ -1,14 +1,14 @@
 {
   "format": 1,
-  "version": "5.21.0-rc.3",
-  "tag": "v5.21.0-rc.3",
+  "version": "5.21.0-rc.4",
+  "tag": "v5.21.0-rc.4",
   "files": {
     "runtime.js": {
-      "sha256": "34367c4c49f64a6d5a51895686cd4f51629ca620a7b36ad3320449fa8654d124",
-      "bytes": 1299139
+      "sha256": "788753d6ed0febbfee4c0fd71eeb3e012de80096ee09e4cab4d262108205e94f",
+      "bytes": 1355452
     },
     "content.json": {
-      "sha256": "f21b8f25b585361c44fca90f592afa2cb39711860cf32595ba41d1ee0552e1ea",
+      "sha256": "27478074e74294412c9eca426067d52e09e441728d660ad26565fdb96a4d169d",
       "bytes": 131679
     }
   }

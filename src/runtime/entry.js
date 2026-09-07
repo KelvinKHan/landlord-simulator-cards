@@ -1,6 +1,8 @@
 import { modules } from '../../.local/build/modules.js';
 import { ModuleScope } from './scope.js';
+import { iconUrl } from './icons.js';
 import { SerialQueue, RenderCoordinator, readWorld, bedroomsFrom, waitUntil } from './coordination.js';
+import { mountViewportPanel } from './viewport-panel.js';
 
 export const VERSION = __APP_VERSION__;
 export const ORDERS = {
@@ -50,6 +52,7 @@ export class LandlordRuntime {
   getBedrooms() { return bedroomsFrom(this.readState()); }
   forScope(scope) {
     return {
+      iconUrl,
       assertCurrent: () => scope.assertActive(),
       registerSchema: (register,schema) => {
         const original=this.helper.eventOn;
@@ -141,6 +144,8 @@ export class LandlordRuntime {
     for (const scope of this.scopes) scope.controller.abort();
     for (const scope of [...this.scopes].reverse()) await scope.dispose();
     this.scopes.length = 0;
+    this.removeControls?.();
+    this.removeControls = null;
     this.host.document.getElementById('landlord-controls')?.remove();
     this.host.getApartmentBedrooms = () => this.getBedrooms();
   }
@@ -155,6 +160,7 @@ export class LandlordRuntime {
   }
   addControls() {
     const doc = this.host.document;
+    this.removeControls?.();
     doc.getElementById('landlord-controls')?.remove();
     const box = doc.createElement('details'); box.id = 'landlord-controls';
     box.style.cssText = 'position:fixed;bottom:12px;right:12px;z-index:100001;background:#272331;color:#fff;padding:10px;border-radius:12px;max-width:320px;font:14px sans-serif;box-shadow:0 3px 18px #0005';
@@ -167,7 +173,11 @@ export class LandlordRuntime {
     }
     if (this.errors.length) { const p = doc.createElement('p'); p.textContent = `最近错误：${this.errors.at(-1).message}`; box.append(p); }
     const note = doc.createElement('p'); note.textContent = '发布版本在左下角“版本与更新”中选择；游玩过程中保持当前版本。'; box.append(note);
-    doc.body.append(box);
+    box.style.boxSizing = 'border-box';
+    box.style.maxWidth = 'min(320px, calc(100vw - 24px))';
+    box.style.maxHeight = 'calc(100dvh - 24px)';
+    box.style.overflowY = 'auto';
+    this.removeControls = mountViewportPanel(this.host, box, 100001);
   }
   async recoverOpening() {
     if (!this.store) return;

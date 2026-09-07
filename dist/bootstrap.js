@@ -166,7 +166,7 @@ async function updateContent({ api, store, content, baseline, identity, isCurren
 
 // src/updater/release.js
 var REPO = "KelvinKHan/landlord-simulator-cards";
-var FALLBACK_TAG = `v${"5.21.0-rc.3"}`;
+var FALLBACK_TAG = `v${"5.21.0-rc.4"}`;
 async function sha256(text) {
   const bytes = typeof text === "string" ? new TextEncoder().encode(text) : text;
   const hash = await crypto.subtle.digest("SHA-256", bytes);
@@ -257,6 +257,21 @@ async function downloadRelease(tag, fetcher = fetch) {
   return output;
 }
 
+// src/runtime/viewport-panel.js
+function mountViewportPanel(host, panel, zIndex) {
+  const doc = host.document;
+  const id = `${panel.id}-viewport`;
+  doc.getElementById(id)?.remove();
+  const layer = doc.createElement("div");
+  layer.id = id;
+  layer.style.cssText = `position:fixed;top:0;left:0;width:100%;height:100vh;height:100dvh;pointer-events:none;z-index:${zIndex};`;
+  panel.style.position = "absolute";
+  panel.style.pointerEvents = "auto";
+  layer.append(panel);
+  doc.body.append(layer);
+  return () => layer.remove();
+}
+
 // src/updater/controls.js
 var INSTANCE = /* @__PURE__ */ Symbol.for("landlord.version-controls");
 function mountVersionControls({ host, getState, refresh, apply }) {
@@ -318,7 +333,7 @@ function mountVersionControls({ host, getState, refresh, apply }) {
   actions.append(refreshButton, applyButton);
   body.append(description, label, select, warning, actions, status, error);
   panel.append(style, summary, body);
-  doc.body.append(panel);
+  const removePanel = mountViewportPanel(host, panel, 100002);
   let disposed = false, pending = "", localError = "", lastPreference = null, draft = "latest", autoRefreshStarted = false;
   let observedBusy = false, busyTimer;
   function render() {
@@ -406,7 +421,7 @@ function mountVersionControls({ host, getState, refresh, apply }) {
       panel.removeEventListener("toggle", render);
       refreshButton.removeEventListener("click", onRefresh);
       applyButton.removeEventListener("click", onApply);
-      panel.remove();
+      removePanel();
       if (host[INSTANCE] === controls) delete host[INSTANCE];
     }
   };

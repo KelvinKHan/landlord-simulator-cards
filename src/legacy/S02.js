@@ -27,6 +27,7 @@
         MAIN_SIZE: 56,           // 主球尺寸
         SUB_SIZE: 48,            // 子球尺寸
         SUB_SPACING: 60,         // 子球间距
+        VIEWPORT_MARGIN: 8,      // 保留触摸和阴影的边缘空间
         DRAG_THRESHOLD: 5,       // 拖拽阈值（px）
         ANIMATION_DURATION: 300, // 动画时长（ms）
         Z_INDEX_MAIN: 10000,     // 主球层级
@@ -52,6 +53,7 @@
         isDragging: false,       // 拖拽状态
         hasMoved: false,         // 是否移动过
         buttons: [],             // 注册的按钮配置
+        cleanups: [],             // 重新初始化时移除宿主页面上的监听
         elements: {              // DOM元素引用
             main: null,          // 主悬浮球
             subContainer: null,  // 子球容器
@@ -125,6 +127,13 @@
     z-index: ${CONFIG.Z_INDEX_SUB};
     pointer-events: none;
 }
+.fmm-sub-container.scrollable.expanded {
+    pointer-events: auto;
+    overflow: auto;
+    overscroll-behavior: contain;
+    background: rgba(31, 41, 55, 0.9);
+    border-radius: 12px;
+}
 
 /* 子悬浮球 */
 .fmm-sub-fab {
@@ -137,54 +146,29 @@
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    transition: transform 0.2s ease, opacity 0.2s ease, box-shadow 0.2s ease;
     user-select: none;
     -webkit-user-select: none;
-    pointer-events: auto;
+    pointer-events: none;
     opacity: 0;
-    transform: scale(0);
+    visibility: hidden;
+    transform: scale(0.8);
 }
-
-.fmm-sub-fab:hover {
+.fmm-sub-container.expanded .fmm-sub-fab {
+    pointer-events: auto;
+    opacity: 1;
+    visibility: visible;
+    transform: scale(1);
+}
+.fmm-sub-container.expanded .fmm-sub-fab:hover {
     transform: scale(1.1);
     box-shadow: 0 4px 20px rgba(0,0,0,0.35);
 }
 
-.fmm-sub-fab:active {
+.fmm-sub-container.expanded .fmm-sub-fab:active {
     transform: scale(0.9);
 }
 
-/* 展开动画 */
-@keyframes fmmExpandBall {
-    0% {
-        opacity: 0;
-        transform: translateY(0) scale(0);
-    }
-    100% {
-        opacity: 1;
-        transform: translateY(var(--offset)) scale(1);
-    }
-}
-
-/* 收起动画 */
-@keyframes fmmCollapseBall {
-    0% {
-        opacity: 1;
-        transform: translateY(var(--offset)) scale(1);
-    }
-    100% {
-        opacity: 0;
-        transform: translateY(0) scale(0);
-    }
-}
-
-.fmm-sub-fab.expanding {
-    animation: fmmExpandBall ${CONFIG.ANIMATION_DURATION}ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-}
-
-.fmm-sub-fab.collapsing {
-    animation: fmmCollapseBall ${CONFIG.ANIMATION_DURATION}ms ease-in forwards;
-}
 </style>
         `;
 
@@ -195,6 +179,10 @@
     function createMainFab() {
         const fab = parentDocument.createElement('div');
         fab.className = 'fmm-main-fab';
+        fab.setAttribute('role', 'button');
+        fab.setAttribute('aria-label', '房东模拟器功能菜单');
+        fab.setAttribute('aria-expanded', 'false');
+        fab.tabIndex = 0;
         fab.innerHTML = `<div class="icon">${ICONS.menu}</div>`;
 
         // 设置初始位置
@@ -219,23 +207,92 @@
         return container;
     }
 
+    function viewportBounds() {
+        const viewport = window.parent.visualViewport;
+        const left = viewport ? viewport.offsetLeft : 0;
+        const top = viewport ? viewport.offsetTop : 0;
+        const width = viewport ? viewport.width : window.parent.innerWidth;
+        const height = viewport ? viewport.height : window.parent.innerHeight;
+        const margin = CONFIG.VIEWPORT_MARGIN;
+        return { left: left + margin, top: top + margin,
+            right: left + width - margin, bottom: top + height - margin };
+    }
+
+    function clamp(value, min, max) {
+        return Math.max(min, Math.min(value, Math.max(min, max)));
+    }
+
     // ============ 更新子球容器位置 ============
     function updateSubContainerPosition() {
         if (!state.elements.main || !state.elements.subContainer) return;
-
         const container = state.elements.subContainer;
+        const count = state.elements.subs.length;
+        if (!count) return;
+        const bounds = viewportBounds();
+        const size = CONFIG.SUB_SIZE, spacing = CONFIG.SUB_SPACING, gap = spacing - size;
+        const { top, left } = state.position;
+        const mainBottom = top + CONFIG.MAIN_SIZE, mainRight = left + CONFIG.MAIN_SIZE;
+        const length = count * spacing - gap;
+        const centerX = clamp(left + (CONFIG.MAIN_SIZE - size) / 2, bounds.left, bounds.right - size);
+        const centerY = clamp(top + (CONFIG.MAIN_SIZE - size) / 2, bounds.top, bounds.bottom - size);
+        let positions, scrollable = false, region;
 
-        // 子球容器位置与主球对齐
-        container.style.top = state.position.top + 'px';
-        container.style.left = state.position.left + 'px';
-        container.style.width = CONFIG.SUB_SIZE + 'px';
-        container.style.height = (state.buttons.length * CONFIG.SUB_SPACING) + 'px';
+        // 优先沿纵向展开；空间不足时改为横向，避免默认位置把公寓按钮推到屏幕外。
+        if (top - gap - bounds.top >= length) {
+            positions = state.elements.subs.map((_, i) => ({ left: centerX, top: top - gap - size - i * spacing }));
+        } else if (bounds.bottom - mainBottom - gap >= length) {
+            positions = state.elements.subs.map((_, i) => ({ left: centerX, top: mainBottom + gap + i * spacing }));
+        } else if (bounds.right - mainRight - gap >= length) {
+            positions = state.elements.subs.map((_, i) => ({ left: mainRight + gap + i * spacing, top: centerY }));
+        } else if (left - gap - bounds.left >= length) {
+            positions = state.elements.subs.map((_, i) => ({ left: left - gap - size - i * spacing, top: centerY }));
+        } else {
+            // 窄窗、横屏或功能较多时，使用主球旁边面积足够的网格。
+            const regions = [
+                { left: bounds.left, top: bounds.top, right: bounds.right, bottom: top - gap },
+                { left: bounds.left, top: mainBottom + gap, right: bounds.right, bottom: bounds.bottom },
+                { left: bounds.left, top: bounds.top, right: left - gap, bottom: bounds.bottom },
+                { left: mainRight + gap, top: bounds.top, right: bounds.right, bottom: bounds.bottom },
+            ].map(area => ({ ...area,
+                columns: Math.max(0, Math.floor((area.right - area.left + gap) / spacing)),
+                rows: Math.max(0, Math.floor((area.bottom - area.top + gap) / spacing)),
+            })).sort((a, b) => b.columns * b.rows - a.columns * a.rows);
+            region = regions[0];
+            // 极小视口仍可通过滚动、键盘逐个到达按钮，不缩小触摸目标。
+            if (!region.columns || !region.rows) {
+                region = { ...bounds, columns: Math.max(1, Math.floor((bounds.right - bounds.left + gap) / spacing)), rows: 1 };
+            }
+            scrollable = region.columns * region.rows < count;
+            const columns = Math.min(count, region.columns);
+            positions = state.elements.subs.map((_, i) => ({
+                left: region.left + (i % columns) * spacing,
+                top: region.top + Math.floor(i / columns) * spacing,
+            }));
+        }
+
+        const originLeft = Math.min(...positions.map(position => position.left));
+        const originTop = Math.min(...positions.map(position => position.top));
+        container.style.left = originLeft + 'px';
+        container.style.top = originTop + 'px';
+        container.style.width = (Math.max(...positions.map(position => position.left)) + size - originLeft) + 'px';
+        container.style.height = (scrollable ? region.bottom - originTop : Math.max(...positions.map(position => position.top)) + size - originTop) + 'px';
+        container.classList.toggle('scrollable', scrollable);
+        container.classList.toggle('expanded', state.isExpanded);
+        state.elements.subs.forEach((fab, index) => {
+            fab.style.left = (positions[index].left - originLeft) + 'px';
+            fab.style.top = (positions[index].top - originTop) + 'px';
+            fab.tabIndex = state.isExpanded ? 0 : -1;
+        });
     }
 
     // ============ 创建子悬浮球 ============
     function createSubFab(config, index) {
         const fab = parentDocument.createElement('div');
         fab.className = 'fmm-sub-fab';
+        fab.setAttribute('role', 'button');
+        fab.setAttribute('aria-label', config.label || config.id);
+        fab.title = config.label || config.id;
+        fab.tabIndex = state.isExpanded ? 0 : -1;
         fab.style.background = config.color || 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
 
         // 设置图标内容
@@ -245,17 +302,17 @@
             fab.textContent = config.icon || '●';
         }
 
-        // 设置位置偏移
-        const offset = -(index + 1) * CONFIG.SUB_SPACING;
-        fab.style.setProperty('--offset', offset + 'px');
-        fab.style.top = '0px';
-        fab.style.left = '4px'; // 居中对齐（(56-48)/2 = 4px）
-
         // 绑定点击事件
         fab.addEventListener('click', function(e) {
             e.stopPropagation();
             if (config.onClick && typeof config.onClick === 'function') {
                 config.onClick();
+            }
+        });
+        fab.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                fab.click();
             }
         });
 
@@ -288,18 +345,8 @@
         const icon = state.elements.main.querySelector('.icon');
         icon.innerHTML = ICONS.chevronDown;
         state.elements.main.classList.add('expanded');
-
-        // 展开子球
-        state.elements.subs.forEach((fab, index) => {
-            fab.classList.remove('collapsing');
-            fab.classList.add('expanding');
-
-            // 延迟显示，创造级联效果
-            setTimeout(() => {
-                fab.style.opacity = '1';
-                fab.style.transform = `translateY(${-(index + 1) * CONFIG.SUB_SPACING}px) scale(1)`;
-            }, index * 50);
-        });
+        state.elements.main.setAttribute('aria-expanded', 'true');
+        updateSubContainerPosition();
     }
 
     // ============ 收起菜单 ============
@@ -311,17 +358,9 @@
         const icon = state.elements.main.querySelector('.icon');
         icon.innerHTML = ICONS.menu;
         state.elements.main.classList.remove('expanded');
-
-        // 收起子球
-        state.elements.subs.forEach((fab, index) => {
-            fab.classList.remove('expanding');
-            fab.classList.add('collapsing');
-
-            setTimeout(() => {
-                fab.style.opacity = '0';
-                fab.style.transform = 'translateY(0) scale(0)';
-            }, index * 30);
-        });
+        state.elements.main.setAttribute('aria-expanded', 'false');
+        state.elements.subContainer.classList.remove('expanded');
+        state.elements.subs.forEach(fab => { fab.tabIndex = -1; });
     }
 
     // ============ 切换展开/收起 ============
@@ -336,6 +375,19 @@
     // ============ 主球拖拽事件 ============
     function bindMainFabEvents(fab) {
         let rafId = null;
+        let pendingMove = null;
+
+        function applyMove() {
+            if (!pendingMove) return;
+            const bounds = viewportBounds();
+            state.position.left = clamp(pendingMove.left, bounds.left, bounds.right - CONFIG.MAIN_SIZE);
+            state.position.top = clamp(pendingMove.top, bounds.top, bounds.bottom - CONFIG.MAIN_SIZE);
+            pendingMove = null;
+            fab.style.left = state.position.left + 'px';
+            fab.style.top = state.position.top + 'px';
+            updateSubContainerPosition();
+            rafId = null;
+        }
 
         function handleStart(e) {
             const touch = e.touches ? e.touches[0] : e;
@@ -344,9 +396,8 @@
             state.dragData.startX = touch.clientX;
             state.dragData.startY = touch.clientY;
 
-            const rect = fab.getBoundingClientRect();
-            state.dragData.initialTop = rect.top;
-            state.dragData.initialLeft = rect.left;
+            state.dragData.initialTop = state.position.top;
+            state.dragData.initialLeft = state.position.left;
 
             fab.classList.add('dragging');
             e.preventDefault();
@@ -366,33 +417,16 @@
 
             // 使用 RAF 优化性能
             if (rafId) cancelAnimationFrame(rafId);
-            rafId = requestAnimationFrame(() => {
-                const newLeft = Math.max(0, Math.min(
-                    state.dragData.initialLeft + deltaX,
-                    window.parent.innerWidth - CONFIG.MAIN_SIZE
-                ));
-                const newTop = Math.max(0, Math.min(
-                    state.dragData.initialTop + deltaY,
-                    window.parent.innerHeight - CONFIG.MAIN_SIZE
-                ));
-
-                state.position.left = newLeft;
-                state.position.top = newTop;
-
-                fab.style.left = newLeft + 'px';
-                fab.style.top = newTop + 'px';
-
-                // 更新子球容器位置
-                updateSubContainerPosition();
-
-                rafId = null;
-            });
+            pendingMove = { left: state.dragData.initialLeft + deltaX, top: state.dragData.initialTop + deltaY };
+            rafId = requestAnimationFrame(applyMove);
 
             e.preventDefault();
         }
 
         function handleEnd(e) {
             if (!state.isDragging) return;
+            if (rafId) cancelAnimationFrame(rafId);
+            applyMove();
             state.isDragging = false;
             fab.classList.remove('dragging');
 
@@ -409,14 +443,30 @@
         }
 
         // 鼠标事件
-        fab.addEventListener('mousedown', handleStart);
-        parentDocument.addEventListener('mousemove', handleMove);
-        parentDocument.addEventListener('mouseup', handleEnd);
+        listen(fab, 'mousedown', handleStart);
+        listen(parentDocument, 'mousemove', handleMove);
+        listen(parentDocument, 'mouseup', handleEnd);
 
         // 触摸事件
-        fab.addEventListener('touchstart', handleStart, { passive: false });
-        parentDocument.addEventListener('touchmove', handleMove, { passive: false });
-        parentDocument.addEventListener('touchend', handleEnd, { passive: false });
+        listen(fab, 'touchstart', handleStart, { passive: false });
+        listen(parentDocument, 'touchmove', handleMove, { passive: false });
+        listen(parentDocument, 'touchend', handleEnd, { passive: false });
+        listen(parentDocument, 'touchcancel', handleEnd, { passive: false });
+        listen(fab, 'keydown', function(e) {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                toggle();
+            }
+        });
+        listen(parentDocument, 'keydown', function(e) {
+            if (e.key === 'Escape' && state.isExpanded) collapse();
+        });
+        state.cleanups.push(() => { if (rafId) cancelAnimationFrame(rafId); });
+    }
+
+    function listen(target, type, callback, options) {
+        target.addEventListener(type, callback, options);
+        state.cleanups.push(() => target.removeEventListener(type, callback, options));
     }
 
     // ============ 位置持久化 ============
@@ -438,8 +488,8 @@
             const saved = localStorage.getItem(CONFIG.STORAGE_KEY);
             if (saved) {
                 const data = JSON.parse(saved);
-                state.position.top = data.top || 100;
-                state.position.left = data.left || 20;
+                state.position.top = Number.isFinite(data.top) ? data.top : 100;
+                state.position.left = Number.isFinite(data.left) ? data.left : 20;
                 // 不恢复展开状态，始终从收起状态开始
             }
         } catch (e) {
@@ -451,52 +501,40 @@
     function adjustPositionToViewport() {
         if (!state.elements.main) return;
 
-        const maxLeft = window.parent.innerWidth - CONFIG.MAIN_SIZE;
-        const maxTop = window.parent.innerHeight - CONFIG.MAIN_SIZE;
-
-        // 确保悬浮球在可见范围内
-        let adjusted = false;
-
-        if (state.position.left > maxLeft) {
-            state.position.left = Math.max(0, maxLeft);
-            adjusted = true;
-        }
-
-        if (state.position.top > maxTop) {
-            state.position.top = Math.max(0, maxTop);
-            adjusted = true;
-        }
-
-        if (state.position.left < 0) {
-            state.position.left = 0;
-            adjusted = true;
-        }
-
-        if (state.position.top < 0) {
-            state.position.top = 0;
-            adjusted = true;
-        }
+        const bounds = viewportBounds();
+        const left = clamp(state.position.left, bounds.left, bounds.right - CONFIG.MAIN_SIZE);
+        const top = clamp(state.position.top, bounds.top, bounds.bottom - CONFIG.MAIN_SIZE);
+        const adjusted = left !== state.position.left || top !== state.position.top;
+        state.position.left = left;
+        state.position.top = top;
 
         // 如果位置被调整，更新DOM和保存
         if (adjusted) {
             state.elements.main.style.left = state.position.left + 'px';
             state.elements.main.style.top = state.position.top + 'px';
-            updateSubContainerPosition();
             savePosition();
         }
+        // 即使主球没有越界，子球可用的展开方向也可能因缩窗或软键盘改变。
+        updateSubContainerPosition();
     }
 
     // ============ 窗口大小改变监听 ============
     function bindWindowResize() {
         let resizeTimer = null;
-        window.parent.addEventListener('resize', function() {
+        function scheduleResize() {
             // 使用防抖，避免频繁调整
             if (resizeTimer) clearTimeout(resizeTimer);
             resizeTimer = setTimeout(function() {
                 adjustPositionToViewport();
                 resizeTimer = null;
             }, 100);
-        });
+        }
+        listen(window.parent, 'resize', scheduleResize);
+        if (window.parent.visualViewport) {
+            listen(window.parent.visualViewport, 'resize', scheduleResize);
+            listen(window.parent.visualViewport, 'scroll', scheduleResize);
+        }
+        state.cleanups.push(() => { if (resizeTimer) clearTimeout(resizeTimer); });
     }
 
     // ============ 公共API ============
@@ -623,6 +661,7 @@
          * 销毁管理器
          */
         destroy: function() {
+            state.cleanups.splice(0).forEach(cleanup => cleanup());
             // 移除DOM元素（通过state引用）
             if (state.elements.main) {
                 state.elements.main.remove();

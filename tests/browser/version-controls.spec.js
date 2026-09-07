@@ -138,4 +138,37 @@ test('repeated mounts and disposal detach handlers and ignore an old pending com
   await page.evaluate(() => { versionControls.dispose(); versionControls.dispose(); versionControls.render(); });
   await expect(page.locator('#landlord-version-controls')).toHaveCount(0);
   expect(await page.evaluate(() => versionTimerIds.size)).toBe(0);
+  await expect(page.locator('#landlord-version-controls-viewport')).toHaveCount(0);
+});
+
+test('version and mode controls remain clickable with the real SillyTavern transformed root', async ({ page }) => {
+  await page.route('https://**', route => {
+    if (route.request().url().includes('mvu_zod.js')) return route.fulfill({contentType:'application/javascript',headers:{'Access-Control-Allow-Origin':'*'},body:'export function registerMvuSchema() {}'});
+    return route.abort();
+  });
+  await page.evaluate(async () => {
+    // Real ST html has a transform/perspective and no in-flow height; body is fixed.
+    document.documentElement.style.cssText = 'transform:translateZ(0);perspective:1000px;';
+    document.body.style.cssText = 'position:fixed;margin:0;width:100%;height:100dvh;overflow:hidden;';
+    await fixtureStart('original');
+  });
+  for (const viewport of [{width:633,height:696},{width:320,height:640},{width:1400,height:1000}]) {
+    await page.setViewportSize(viewport);
+    for (const id of ['landlord-version-controls','landlord-controls']) {
+      const panel = page.locator(`#${id}`);
+      const rect = await panel.boundingBox();
+      expect(rect.x).toBeGreaterThanOrEqual(0);
+      expect(rect.y).toBeGreaterThanOrEqual(0);
+      expect(rect.x+rect.width).toBeLessThanOrEqual(viewport.width);
+      expect(rect.y+rect.height).toBeLessThanOrEqual(viewport.height);
+    }
+    await page.locator('#landlord-version-controls summary').click();
+    await page.locator('#landlord-version-controls summary').click();
+    await expect(page.getByLabel('更新方式与版本')).toBeVisible();
+    // Fullscreen layers must not swallow gameplay/input clicks outside the controls.
+    await page.locator('#send_textarea').fill('输入仍然可用');
+    await expect(page.locator('#send_textarea')).toHaveValue('输入仍然可用');
+  }
+  await page.evaluate(async () => { await runtime.dispose(); versionControls.dispose(); });
+  await expect(page.locator('[id$="controls-viewport"]')).toHaveCount(0);
 });

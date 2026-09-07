@@ -44,13 +44,13 @@ function weatherSvg(weatherType, size, color) {
   var info = WEATHER_TYPES[weatherType]
   if (!info || !info.svg) return info ? info.icon : '🌤️'
   var c = color || '%23ffffff'
-  return '<img src="https://api.iconify.design/' + info.svg + '.svg?color=' + c + '" style="width:' + size + 'px;height:' + size + 'px;vertical-align:middle;filter:drop-shadow(0 2px 6px rgba(0,0,0,0.25));">'
+  return '<img src="' + landlord.iconUrl(info.svg, c) + '" style="width:' + size + 'px;height:' + size + 'px;vertical-align:middle;filter:drop-shadow(0 2px 6px rgba(0,0,0,0.25));">'
 }
 
 // Iconify图标辅助函数（非天气图标）
 function iconSvg(name, size, color) {
   var c = color || '%23ffffff'
-  return '<img src="https://api.iconify.design/' + name + '.svg?color=' + c + '" style="width:' + size + 'px;height:' + size + 'px;vertical-align:middle;">'
+  return '<img src="' + landlord.iconUrl(name, c) + '" style="width:' + size + 'px;height:' + size + 'px;vertical-align:middle;">'
 }
 
 // 季节定义
@@ -1460,4 +1460,3 @@ if (typeof module !== 'undefined' && module.exports) {
     renderWeatherApp: renderWeatherApp
   }
 }
-

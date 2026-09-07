@@ -1092,7 +1092,7 @@
         // 头像
         let avatarIcon = isGroup ? 'ri:group-fill' : 'ri:user-3-fill';
         let avatarColor = isGroup ? '#07c160' : '#888';
-        const avatarUrl = `https://api.iconify.design/${avatarIcon}.svg?color=white`;
+        const avatarUrl = landlord.iconUrl(avatarIcon, 'white');
         const avatarBg = isGroup ? '#07c160' : '#ddd';
 
         return `
