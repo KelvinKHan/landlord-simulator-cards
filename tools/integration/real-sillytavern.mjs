@@ -34,6 +34,7 @@ try{
   const imported=await context.request.post(origin+'/api/characters/import',{headers:{'X-CSRF-Token':token},multipart:{avatar:{name:'landlord.json',mimeType:'application/json',buffer:card},file_type:'json'}});
   assert.equal(imported.status(),200);
   await page.route('https://api.github.com/repos/KelvinKHan/landlord-simulator-cards/releases/latest',r=>r.fulfill({status:404,headers:{'Access-Control-Allow-Origin':'*'},body:'{}'}));
+  await page.route('https://api.github.com/repos/KelvinKHan/landlord-simulator-cards/releases?per_page=100',r=>r.fulfill({status:200,headers:{'Access-Control-Allow-Origin':'*'},contentType:'application/json',body:'[]'}));
   await page.route('https://cdn.jsdelivr.net/gh/KelvinKHan/landlord-simulator-cards@*/dist/*',async r=>{const file=r.request().url().split('/').at(-1);await r.fulfill({headers:{'Access-Control-Allow-Origin':'*'},contentType:file.endsWith('.json')?'application/json':'application/javascript',body:await fs.readFile(path.join(root,'dist',file))})});
   await page.route(/\/chat\/completions|\/api\/backends\/.*\/generate|\/api\/generate$/,r=>{report.paidApiCalls++;return r.abort()});
   await page.goto(origin);
@@ -54,12 +55,60 @@ try{
   assert.doesNotMatch(JSON.stringify(liveBook),/大富翁|分基地|monopoly/i);
   report.checks.push('single imported script, original 20 modules, real MVU initialized');
   report.checks.push('new chat and live character worldbook contain no retired gameplay state or rules');
+  assert.equal(await page.locator('#landlord-version-controls').count(),1);
+  assert.equal(await page.evaluate(()=>window.__LandlordUpdater.getState().preference.mode),'latest');
 
   await page.locator('#landlord-controls summary').click();await page.getByRole('button',{name:'使用二改版',exact:true}).click();
   await page.waitForFunction(()=>LandlordRuntime.mode==='remix' && LandlordRuntime.running);
   assert.equal(await page.evaluate(()=>LandlordRuntime.scopes.length),7);
   assert.equal(await page.locator('#apt-shadow-host').count(),1);
   report.checks.push('in-game mode button switches to remix with 7 modules');
+  async function openVersionControls(){
+    const panel=page.locator('#landlord-version-controls');
+    const closed=panel.locator('details:not([open])');
+    if(await panel.evaluate(el=>el.tagName==='DETAILS'&&!el.open))await panel.locator('summary').click();
+    else if(await closed.count())await closed.first().locator('summary').click();
+    return panel;
+  }
+  async function saveVersionChoice(mode){
+    const panel=await openVersionControls();
+    const select=panel.getByRole('combobox',{name:'更新方式与版本',exact:true});
+    const tag=`v${pkg.version}`;
+    if(mode==='pinned'){
+      await panel.getByRole('button',{name:'刷新版本列表',exact:true}).click();
+      await page.waitForFunction(()=>!window.__LandlordUpdater.getState().busy);
+      const options=await select.locator('option').evaluateAll(options=>options.map(option=>({value:option.value,text:option.textContent})));
+      const current=options.find(option=>option.text.includes(tag));
+      assert.ok(current,'entry fallback must remain selectable when no releases are published');
+      await select.selectOption(current.value);
+    }else await select.selectOption({label:'跟随最新正式版'});
+    const before=await page.evaluate(()=>{
+      window.__landlordIntegrationOldUpdater=window.__LandlordUpdater;
+      const {chatId,characterId}=SillyTavern.getContext();return {chatId,characterId};
+    });
+    let hostNavigations=0;
+    const trackNavigation=frame=>{if(frame===page.mainFrame())hostNavigations++};
+    page.on('framenavigated',trackNavigation);
+    try{
+      await panel.getByRole('button',{name:'保存选择并刷新',exact:true}).click();
+      await page.waitForFunction(({tag,mode})=>window.__landlordIntegrationOldUpdater && window.__LandlordUpdater!==window.__landlordIntegrationOldUpdater && window.LandlordRuntime?.running && window.__LandlordUpdater?.getState().currentTag===tag && window.__LandlordUpdater.getState().preference.mode===mode,{tag,mode},{timeout:90000});
+    }catch(error){
+      console.error('Version reload diagnostic:',JSON.stringify(await page.evaluate(()=>({url:location.href,updater:window.__LandlordUpdater?.getState(),runtime:window.LandlordRuntime?{running:LandlordRuntime.running,mode:LandlordRuntime.mode,errors:LandlordRuntime.errors}:null,chat:window.SillyTavern?.getContext().chatId,dialogs:[...document.querySelectorAll('dialog[open]')].map(el=>el.textContent.slice(0,600)),panel:document.querySelector('#landlord-version-controls')?.textContent,iframes:[...document.querySelectorAll('iframe[id^="TH-script"]')].map(el=>el.id)}))));
+      console.error('Observed browser errors:',JSON.stringify(errors));throw error;
+    }finally{page.off('framenavigated',trackNavigation)}
+    const current=await page.evaluate(()=>({updater:__LandlordUpdater.getState(),mode:LandlordRuntime.mode,scopes:LandlordRuntime.scopes.length,chatId:SillyTavern.getContext().chatId,characterId:SillyTavern.getContext().characterId,scripts:TavernHelper.getScriptTrees({type:'character'}).length,frames:document.querySelectorAll('iframe[id^="TH-script"]').length}));
+    assert.equal(hostNavigations,0,'Tavern Helper reload must leave the host page and current chat open');
+    assert.equal(current.chatId,before.chatId);assert.equal(current.characterId,before.characterId);
+    assert.equal(current.updater.preference.mode,mode);
+    if(mode==='pinned')assert.equal(current.updater.preference.tag,tag);
+    assert.equal(current.updater.currentTag,tag);
+    assert.equal(current.mode,'remix');assert.equal(current.scopes,7);
+    assert.equal(current.scripts,1);assert.equal(current.frames,1);
+  }
+  await saveVersionChoice('pinned');
+  report.checks.push('in-card version selector pins the current release via official helper iframe reload, preserving the open chat, remix mode and one script');
+  await saveVersionChoice('latest');
+  report.checks.push('in-card version selector restores automatic formal-release tracking via helper iframe reload without host navigation');
   await page.evaluate(async()=>{const {swipe_right}=await import('/script.js');await swipe_right()});
   await page.waitForFunction(()=>LandlordRuntime.running && SillyTavern.getContext().chat[0].swipe_id===1 && LandlordRuntime.readState().世界?.年份==='2025年');
   report.checks.push('real swipe updates MVU and restarts modules');

@@ -20,7 +20,7 @@ def main():
     card = copy.deepcopy(original)
     data = card['data']
     loader = copy.deepcopy(data['extensions']['tavern_helper']['scripts'][0])
-    loader.update(name='房东模拟器 · 单入口', enabled=True, content=f"import 'https://cdn.jsdelivr.net/gh/KelvinKHan/landlord-simulator-cards@v{version}/dist/bootstrap.js';", info='启动时检查正式发布版本；原版与二改版在游戏内选择。更新前备份官方世界书，保留玩家自定义修改。')
+    loader.update(name='房东模拟器 · 单入口', enabled=True, content=f"import 'https://cdn.jsdelivr.net/gh/KelvinKHan/landlord-simulator-cards@v{version}/dist/bootstrap.js';", info='卡内可选择跟随最新正式版或固定版本，脚本与官方世界书配套加载。原版与二改版在游戏内选择；更新前备份世界书并保留玩家修改。')
     data['extensions']['tavern_helper']['scripts'] = [loader]
     data['extensions']['landlord_release'] = {'format': 1, 'version': version, 'channel': 'stable', 'repository': 'KelvinKHan/landlord-simulator-cards'}
     data['character_version'] = version

@@ -4,7 +4,7 @@ const pkg=JSON.parse(await fs.readFile('package.json'));
 const tag=process.env.RELEASE_TAG;
 if(tag!==`v${pkg.version}`||!/^v\d+\.\d+\.\d+(?:-rc\.\d+)?$/.test(tag))throw Error('标签与构建版本不一致');
 const assets=(await fs.readdir('exports')).filter(name=>name.endsWith('.png')||name.endsWith('.json')||name.endsWith('.js')).filter(name=>!name.startsWith('房东模拟器Z')||name.includes(pkg.version)).map(name=>`exports/${name}`);
-const notes=`房东模拟器 ${pkg.version}\n\n单入口脚本、原版/二改版选择、时序修复及正式版脚本/世界书更新。已移除大富翁及分基地相关定义、世界书段落和新卡开场说明；原卡备份保留。\n\n请先按 docs/testing/README.md 验收。此草稿不会被玩家自动发现；发布正式 Release 后才会启用自动分发。\n`;
+const notes=`房东模拟器 ${pkg.version}\n\n单入口脚本、原版/二改版选择、时序修复及脚本/世界书更新。新增卡内发布版本选择：可跟随最新正式版或固定版本，后续普通更新无需反复导入卡。已移除大富翁及分基地相关定义、世界书段落和新卡开场说明；原卡备份保留。\n\n请先按 docs/testing/README.md 验收。此草稿不会被玩家自动发现；发布正式 Release 后才会启用自动分发。\n`;
 await fs.mkdir('.local',{recursive:true});await fs.writeFile('.local/release-notes.md',notes);
 const args=['release','create',tag,...assets,'--draft','--verify-tag','--title',`房东模拟器 ${pkg.version}`,'--notes-file','.local/release-notes.md'];
 if(pkg.version.includes('-'))args.push('--prerelease');

@@ -25044,7 +25044,7 @@ async function waitUntil(get, { signal, timeout = 2e4, interval = 25 } = {}) {
 }
 
 // src/runtime/entry.js
-var VERSION = "5.21.0-rc.2";
+var VERSION = "5.21.0-rc.3";
 var ORDERS = {
   original: ["S02", "S04", "S07", "S08", "S06", "S09", "S10", "S11", "S12", "S13", "S14", "S15", "S16", "S17", "S18", "S19", "S20", "S21", "S22", "S23"],
   remix: ["S02", "S25", "S26", "S27", "S28", "S29", "S23"]
@@ -25251,7 +25251,7 @@ var LandlordRuntime = class {
     summary.textContent = `\u623F\u4E1C\u6A21\u62DF\u5668 \xB7 ${this.mode === "original" ? "\u539F\u7248" : "\u4E8C\u6539\u7248"} \xB7 ${VERSION}`;
     box.append(summary);
     const desc = doc.createElement("p");
-    desc.textContent = "\u4E24\u5957\u7248\u672C\u5404\u81EA\u4FDD\u7559\u624B\u673A\u8BB0\u5F55\u3002\u5207\u6362\u7248\u672C\u4F1A\u5173\u95ED\u5F53\u524D\u5E94\u7528\u7A97\u53E3\u3002";
+    desc.textContent = "\u539F\u7248\u4E0E\u4E8C\u6539\u7248\u5404\u81EA\u4FDD\u7559\u624B\u673A\u8BB0\u5F55\u3002\u5207\u6362\u4F1A\u5173\u95ED\u5F53\u524D\u5E94\u7528\u7A97\u53E3\u3002";
     box.append(desc);
     for (const [mode, label] of [["original", "\u4F7F\u7528\u539F\u7248"], ["remix", "\u4F7F\u7528\u4E8C\u6539\u7248"]]) {
       const button = doc.createElement("button");
@@ -25274,7 +25274,7 @@ var LandlordRuntime = class {
       box.append(p);
     }
     const note = doc.createElement("p");
-    note.textContent = "\u542F\u52A8\u65F6\u68C0\u67E5\u6B63\u5F0F\u7248\u66F4\u65B0\uFF1B\u6E38\u73A9\u8FC7\u7A0B\u4E2D\u4FDD\u6301\u5F53\u524D\u7248\u672C\u3002";
+    note.textContent = "\u53D1\u5E03\u7248\u672C\u5728\u5DE6\u4E0B\u89D2\u201C\u7248\u672C\u4E0E\u66F4\u65B0\u201D\u4E2D\u9009\u62E9\uFF1B\u6E38\u73A9\u8FC7\u7A0B\u4E2D\u4FDD\u6301\u5F53\u524D\u7248\u672C\u3002";
     box.append(note);
     doc.body.append(box);
   }

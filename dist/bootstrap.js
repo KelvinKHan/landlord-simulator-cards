@@ -166,14 +166,17 @@ async function updateContent({ api, store, content, baseline, identity, isCurren
 
 // src/updater/release.js
 var REPO = "KelvinKHan/landlord-simulator-cards";
-var FALLBACK_TAG = `v${"5.21.0-rc.2"}`;
+var FALLBACK_TAG = `v${"5.21.0-rc.3"}`;
 async function sha256(text) {
   const bytes = typeof text === "string" ? new TextEncoder().encode(text) : text;
   const hash = await crypto.subtle.digest("SHA-256", bytes);
   return [...new Uint8Array(hash)].map((n) => n.toString(16).padStart(2, "0")).join("");
 }
 function isReleaseTag(tag) {
-  return /^v\d+\.\d+\.\d+$/.test(tag);
+  return typeof tag === "string" && tag === tag.trim() && /^v\d+\.\d+\.\d+$/.test(tag);
+}
+function isInstallableTag(tag) {
+  return typeof tag === "string" && tag === tag.trim() && /^v\d+\.\d+\.\d+(?:-rc\.\d+)?$/.test(tag);
 }
 function compareVersions(a, b) {
   const left = a.replace(/^v/, "").split(/[.-]/).slice(0, 3).map(Number);
@@ -200,20 +203,219 @@ async function latestTag(fetcher = fetch) {
   if (release.draft || release.prerelease || !isReleaseTag(release.tag_name)) throw new Error("\u6CA1\u6709\u53EF\u7528\u6B63\u5F0F\u7248\u672C");
   return release.tag_name;
 }
+async function listReleases(fetcher = fetch) {
+  const releases = /* @__PURE__ */ new Map();
+  for (let page = 1; page <= 5; page++) {
+    const items = JSON.parse(await fetchText(`https://api.github.com/repos/${REPO}/releases?per_page=100&page=${page}`, { fetcher, maxBytes: 2e6 }));
+    if (!Array.isArray(items)) throw new Error("\u7248\u672C\u76EE\u5F55\u683C\u5F0F\u4E0D\u6B63\u786E");
+    for (const item of items) {
+      const tag = item?.tag_name;
+      if (item?.draft || !isInstallableTag(tag) || releases.has(tag)) continue;
+      releases.set(tag, {
+        tag,
+        version: tag.slice(1),
+        name: typeof item.name === "string" && item.name.trim() ? item.name : tag,
+        prerelease: Boolean(item.prerelease) || !isReleaseTag(tag),
+        publishedAt: typeof item.published_at === "string" ? item.published_at : null
+      });
+    }
+    if (items.length < 100) break;
+  }
+  return [...releases.values()].sort((a, b) => compareVersions(b.tag, a.tag));
+}
+function assertManifest(manifest, tag) {
+  if (!isInstallableTag(tag) || manifest?.format !== 1 || manifest.tag !== tag || typeof manifest.version !== "string" || `v${manifest.version}` !== tag) throw new Error("\u7248\u672C\u6E05\u5355\u4E0D\u4E00\u81F4");
+}
+async function assertRelease(release) {
+  assertManifest(release?.manifest, release?.tag);
+  for (const file of ["runtime.js", "content.json"]) {
+    const text = release[file];
+    const expected = release.manifest.files?.[file];
+    if (typeof text !== "string" || !Number.isSafeInteger(expected?.bytes) || expected.bytes < 0 || typeof expected.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(expected.sha256) || new TextEncoder().encode(text).length !== expected.bytes || await sha256(text) !== expected.sha256) throw new Error(`${file} \u6821\u9A8C\u5931\u8D25`);
+  }
+  const content = JSON.parse(release["content.json"]);
+  if (content?.version !== release.manifest.version || !Array.isArray(content?.worldbook?.entries)) throw new Error("\u5185\u5BB9\u5305\u7248\u672C\u4E0D\u4E00\u81F4");
+}
+async function validateRelease(release) {
+  try {
+    await assertRelease(release);
+    return true;
+  } catch {
+    return false;
+  }
+}
 async function downloadRelease(tag, fetcher = fetch) {
-  if (!/^v\d+\.\d+\.\d+(?:-rc\.\d+)?$/.test(tag)) throw new Error("\u65E0\u6548\u7248\u672C\u53F7");
+  if (!isInstallableTag(tag)) throw new Error("\u65E0\u6548\u7248\u672C\u53F7");
   const base = `https://cdn.jsdelivr.net/gh/${REPO}@${tag}/dist/`;
   const manifest = JSON.parse(await fetchText(base + "release.json", { fetcher, maxBytes: 2e4 }));
-  if (manifest.format !== 1 || manifest.tag !== tag || `v${manifest.version}` !== tag) throw new Error("\u7248\u672C\u6E05\u5355\u4E0D\u4E00\u81F4");
+  assertManifest(manifest, tag);
   const output = { manifest, tag };
   for (const file of ["runtime.js", "content.json"]) {
-    const text = await fetchText(base + file, { fetcher });
-    if (await sha256(text) !== manifest.files?.[file]?.sha256 || new TextEncoder().encode(text).length !== manifest.files[file].bytes) throw new Error(`${file} \u6821\u9A8C\u5931\u8D25`);
-    output[file] = text;
+    output[file] = await fetchText(base + file, { fetcher });
   }
-  const content = JSON.parse(output["content.json"]);
-  if (content.version !== manifest.version || !Array.isArray(content.worldbook?.entries)) throw new Error("\u5185\u5BB9\u5305\u7248\u672C\u4E0D\u4E00\u81F4");
+  await assertRelease(output);
   return output;
+}
+
+// src/updater/controls.js
+var INSTANCE = /* @__PURE__ */ Symbol.for("landlord.version-controls");
+function mountVersionControls({ host, getState, refresh, apply }) {
+  host[INSTANCE]?.dispose();
+  const doc = host.document;
+  doc.getElementById("landlord-version-controls")?.remove();
+  const panel = doc.createElement("details");
+  panel.id = "landlord-version-controls";
+  const style = doc.createElement("style");
+  style.textContent = `
+    #landlord-version-controls { position:fixed; bottom:12px; left:12px; z-index:100002;
+      box-sizing:border-box; max-width:min(340px,calc(100vw - 24px)); padding:10px 12px;
+      border:1px solid #77677e; border-radius:12px; background:#272331; color:#fff;
+      font:14px/1.5 sans-serif; box-shadow:0 3px 18px #0005; overflow-wrap:anywhere;
+      max-height:calc(100dvh - 24px); overflow-y:auto; }
+    #landlord-version-controls summary { cursor:pointer; }
+    #landlord-version-controls .landlord-version-body { width:310px; max-width:100%; }
+    #landlord-version-controls p { margin:10px 0; }
+    #landlord-version-controls label { display:block; margin-bottom:5px; }
+    #landlord-version-controls select { display:block; box-sizing:border-box; width:100%;
+      min-height:38px; border:1px solid #a999b0; border-radius:6px; padding:6px;
+      background:#fff; color:#201c27; font:inherit; }
+    #landlord-version-controls .landlord-version-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+    #landlord-version-controls button { min-height:38px; flex:1 1 125px; padding:6px 8px;
+      border:1px solid #a999b0; border-radius:6px; background:#e9d8ef; color:#201c27;
+      font:inherit; cursor:pointer; }
+    #landlord-version-controls button:disabled, #landlord-version-controls select:disabled { opacity:.6; cursor:wait; }
+    #landlord-version-controls [role=alert] { color:#ffb8b8; }
+    #landlord-version-controls [hidden] { display:none; }
+    @media(max-width:640px) { #landlord-version-controls { bottom:70px; max-height:calc(100dvh - 82px); } }
+  `;
+  const summary = doc.createElement("summary");
+  const body = doc.createElement("div");
+  body.className = "landlord-version-body";
+  const description = doc.createElement("p");
+  description.textContent = "\u8FD9\u91CC\u9009\u62E9\u529F\u80FD\u53D1\u5E03\u7248\u672C\u3002\u539F\u7248\u4E0E\u4E8C\u6539\u7248\u4ECD\u5728\u6E38\u620F\u6A21\u5F0F\u4E2D\u53E6\u884C\u9009\u62E9\u3002";
+  const label = doc.createElement("label");
+  label.htmlFor = "landlord-version-choice";
+  label.textContent = "\u66F4\u65B0\u65B9\u5F0F\u4E0E\u7248\u672C";
+  const select = doc.createElement("select");
+  select.id = label.htmlFor;
+  const warning = doc.createElement("p");
+  warning.id = "landlord-version-warning";
+  warning.textContent = "\u4FDD\u5B58\u540E\u4F1A\u91CD\u65B0\u52A0\u8F7D\u672C\u5361\u529F\u80FD\u5E76\u5173\u95ED\u5F53\u524D\u529F\u80FD\u7A97\u53E3\uFF0C\u8BF7\u5148\u4FDD\u5B58\u672A\u5B8C\u6210\u7684\u7F16\u8F91\u3002\u5207\u6362\u7248\u672C\u4E0D\u4F1A\u56DE\u9000\u804A\u5929\u8BB0\u5F55\u6216\u5B58\u6863\u3002\u8DDF\u968F\u6700\u65B0\u6B63\u5F0F\u7248\u4F1A\u5728\u4E0B\u6B21\u542F\u52A8\u65F6\u68C0\u67E5\u66F4\u65B0\u3002";
+  select.setAttribute("aria-describedby", warning.id);
+  const actions = doc.createElement("div");
+  actions.className = "landlord-version-actions";
+  const refreshButton = doc.createElement("button");
+  refreshButton.type = "button";
+  refreshButton.textContent = "\u5237\u65B0\u7248\u672C\u5217\u8868";
+  const applyButton = doc.createElement("button");
+  applyButton.type = "button";
+  applyButton.textContent = "\u4FDD\u5B58\u9009\u62E9\u5E76\u5237\u65B0";
+  const status = doc.createElement("p");
+  status.setAttribute("role", "status");
+  status.setAttribute("aria-live", "polite");
+  const error = doc.createElement("p");
+  error.setAttribute("role", "alert");
+  actions.append(refreshButton, applyButton);
+  body.append(description, label, select, warning, actions, status, error);
+  panel.append(style, summary, body);
+  doc.body.append(panel);
+  let disposed = false, pending = "", localError = "", lastPreference = null, draft = "latest", autoRefreshStarted = false;
+  let observedBusy = false, busyTimer;
+  function render() {
+    if (disposed) return;
+    const state = getState();
+    const preference = state.preference?.mode === "pinned" ? state.preference.tag : "latest";
+    if (lastPreference !== preference) {
+      draft = preference;
+      lastPreference = preference;
+    }
+    const option = (value, text) => {
+      const node = doc.createElement("option");
+      node.value = value;
+      node.textContent = text;
+      select.append(node);
+    };
+    select.replaceChildren();
+    option("latest", "\u8DDF\u968F\u6700\u65B0\u6B63\u5F0F\u7248");
+    const tags = /* @__PURE__ */ new Set();
+    for (const release of state.releases || []) {
+      if (typeof release.tag !== "string" || !release.tag || tags.has(release.tag)) continue;
+      tags.add(release.tag);
+      const name = release.name && release.name !== release.tag ? `${release.name}\uFF08${release.tag}\uFF09` : release.tag;
+      option(release.tag, `${name}${release.prerelease ? " \xB7 \u5019\u9009\u7248" : ""}`);
+    }
+    for (const tag of /* @__PURE__ */ new Set([preference, draft])) {
+      if (tag && tag !== "latest" && !tags.has(tag)) {
+        option(tag, `\u5DF2\u9009\u7248\u672C\uFF1A${tag}\uFF08\u5217\u8868\u6682\u672A\u63D0\u4F9B\uFF09`);
+        tags.add(tag);
+      }
+    }
+    select.value = draft;
+    summary.textContent = `\u7248\u672C\u4E0E\u66F4\u65B0 \xB7 ${state.currentTag || "\u6B63\u5728\u542F\u52A8"}`;
+    observedBusy = Boolean(state.busy);
+    const busy = Boolean(pending || observedBusy);
+    panel.setAttribute("aria-busy", String(busy));
+    select.disabled = refreshButton.disabled = applyButton.disabled = busy;
+    status.textContent = pending || state.status || "";
+    status.hidden = !status.textContent;
+    error.textContent = localError || state.error || "";
+    error.hidden = !error.textContent;
+    if (panel.open && !autoRefreshStarted && !busy) {
+      autoRefreshStarted = true;
+      void request("\u6B63\u5728\u5237\u65B0\u7248\u672C\u5217\u8868\u2026", refresh);
+    }
+  }
+  async function request(message, callback) {
+    if (disposed || pending || getState().busy) return;
+    pending = message;
+    localError = "";
+    render();
+    try {
+      await callback();
+    } catch (failure) {
+      if (!disposed) localError = failure?.message || String(failure || "\u64CD\u4F5C\u5931\u8D25\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5\u3002");
+    } finally {
+      if (!disposed) {
+        pending = "";
+        render();
+      }
+    }
+  }
+  const onChange = () => {
+    draft = select.value;
+    localError = "";
+  };
+  const onRefresh = () => {
+    void request("\u6B63\u5728\u5237\u65B0\u7248\u672C\u5217\u8868\u2026", refresh);
+  };
+  const onApply = () => {
+    const preference = draft === "latest" ? { mode: "latest" } : { mode: "pinned", tag: draft };
+    void request("\u6B63\u5728\u4FDD\u5B58\u9009\u62E9\u5E76\u51C6\u5907\u5237\u65B0\u2026", () => apply(preference));
+  };
+  select.addEventListener("change", onChange);
+  panel.addEventListener("toggle", render);
+  refreshButton.addEventListener("click", onRefresh);
+  applyButton.addEventListener("click", onApply);
+  const controls = {
+    render,
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      if (busyTimer !== void 0) host.clearInterval(busyTimer);
+      select.removeEventListener("change", onChange);
+      panel.removeEventListener("toggle", render);
+      refreshButton.removeEventListener("click", onRefresh);
+      applyButton.removeEventListener("click", onApply);
+      panel.remove();
+      if (host[INSTANCE] === controls) delete host[INSTANCE];
+    }
+  };
+  host[INSTANCE] = controls;
+  render();
+  busyTimer = host.setInterval(() => {
+    if (!disposed && Boolean(getState().busy) !== observedBusy) render();
+  }, 500);
+  return controls;
 }
 
 // src/runtime/coordination.js
@@ -991,69 +1193,232 @@ var baseline_5_20_default = {
 };
 
 // src/updater/bootstrap.js
-async function validCache(release) {
-  if (!release) return false;
-  try {
-    return await sha256(release["runtime.js"]) === release.manifest.files["runtime.js"].sha256 && await sha256(release["content.json"]) === release.manifest.files["content.json"].sha256;
-  } catch {
-    return false;
-  }
-}
-async function boot({ helper = window, fetcher = fetch, importer = (url) => import(url), store = new UpdateStore(helper.parent.indexedDB) } = {}) {
+var latestPreference = () => ({ mode: "latest" });
+var validPreference = (value) => value?.mode === "latest" || value?.mode === "pinned" && isInstallableTag(value.tag);
+var preferenceCopy = (value) => value.mode === "pinned" ? { mode: "pinned", tag: value.tag } : latestPreference();
+async function boot({ helper = window, fetcher = fetch, importer = (url) => import(url), store = new UpdateStore(helper.parent.indexedDB), reload } = {}) {
   const host = helper.parent;
+  await host.__LandlordUpdater?.dispose?.();
   const controller = new AbortController();
-  const leave = () => controller.abort();
-  helper.addEventListener("pagehide", leave, { once: true });
   const characterKey = () => {
-    const ctx = host.SillyTavern.getContext();
+    const ctx = host.SillyTavern?.getContext?.() || {};
     return ctx.characters?.[ctx.characterId]?.avatar || helper.getCurrentCharacterId?.();
   };
-  const identity = () => `${helper.getCurrentCharacterId?.()}:${host.SillyTavern?.getContext?.().chatId}`;
+  const identity = () => `${characterKey()}:${host.SillyTavern?.getContext?.().chatId}`;
   const idle = () => {
     const ctx = host.SillyTavern?.getContext?.() || {};
-    return ctx.characterId != null && !ctx.isGenerating && !ctx.is_send_press && !host.document.querySelector("#mes_stop")?.offsetParent;
+    return ctx.characterId != null && !ctx.isGenerating && !ctx.is_send_press && !host.document.querySelector("#mes_stop")?.offsetParent && !host.LandlordRuntime?.busy?.();
   };
-  const cacheKey = "last-good-release";
-  let cached = await store.get(cacheKey);
-  if (!await validCache(cached)) cached = null;
-  let selected;
+  let panel, api, ownedRuntime;
+  const dispose = () => {
+    controller.abort();
+    panel?.dispose();
+    helper.removeEventListener("pagehide", dispose);
+    if (host.__LandlordUpdater === api) delete host.__LandlordUpdater;
+    return ownedRuntime?.dispose?.();
+  };
+  helper.addEventListener("pagehide", dispose, { once: true });
+  await waitUntil(() => characterKey() && host.document?.body, { signal: controller.signal });
+  const owner = characterKey();
+  const ensure = () => {
+    if (controller.signal.aborted || characterKey() !== owner) throw new DOMException("\u89D2\u8272\u5DF2\u7ECF\u6539\u53D8\uFF0C\u64CD\u4F5C\u5DF2\u53D6\u6D88", "AbortError");
+  };
+  const scopedFetch = (url, options = {}) => fetcher(url, { ...options, signal: options.signal ? AbortSignal.any([options.signal, controller.signal]) : controller.signal });
+  const preferenceKey = `version-preference:${owner}`;
+  const cacheKey = `last-good-release:${owner}`;
+  let cached;
+  let preference = latestPreference();
+  let catalog = [];
+  let notice = "";
+  const state = { currentTag: null, preference, releases: [], busy: true, status: "\u6B63\u5728\u8BFB\u53D6\u7248\u672C\u8BBE\u7F6E\u2026", error: null };
+  const render = () => {
+    if (!controller.signal.aborted) panel?.render();
+  };
+  const available = () => {
+    const entries = new Map(catalog.map((r) => [r.tag, r]));
+    for (const [tag, label] of [[FALLBACK_TAG, "\u5165\u53E3\u9ED8\u8BA4\u7248\u672C"], [cached?.tag, "\u5DF2\u9A8C\u8BC1\u7248\u672C"], [state.currentTag, "\u5F53\u524D\u7248\u672C"], [preference.tag, "\u56FA\u5B9A\u7248\u672C"]]) {
+      if (isInstallableTag(tag) && !entries.has(tag)) entries.set(tag, { tag, version: tag.slice(1), name: label, prerelease: tag.includes("-") });
+    }
+    return [...entries.values()].sort((a, b) => compareVersions(b.tag, a.tag));
+  };
+  const getRelease = async (tag) => {
+    ensure();
+    if (cached?.tag === tag && await validateRelease(cached)) {
+      ensure();
+      return cached;
+    }
+    const stored = await store.get(`release:${tag}`);
+    ensure();
+    if (stored?.tag === tag && await validateRelease(stored)) {
+      ensure();
+      return stored;
+    }
+    const release = await downloadRelease(tag, scopedFetch);
+    ensure();
+    return release;
+  };
+  const resolveLatest = async () => {
+    try {
+      const tag = await latestTag(scopedFetch);
+      ensure();
+      if (cached && cached.selectionMode !== "pinned" && isReleaseTag(cached.tag) && compareVersions(cached.tag, tag) > 0) return cached;
+      return await getRelease(tag);
+    } catch (error) {
+      ensure();
+      notice = "\u6B63\u5F0F\u7248\u68C0\u67E5\u6682\u672A\u5B8C\u6210\uFF1B\u5F53\u524D\u4F7F\u7528\u5DF2\u9A8C\u8BC1\u7248\u672C\uFF0C\u4E0B\u6B21\u542F\u52A8\u4F1A\u518D\u68C0\u67E5\u3002";
+      if (cached && compareVersions(cached.tag, FALLBACK_TAG) >= 0) return cached;
+      try {
+        return await getRelease(FALLBACK_TAG);
+      } catch (error2) {
+        ensure();
+        if (cached) return cached;
+        throw error2;
+      }
+    }
+  };
+  api = {
+    getState: () => ({ ...state, preference: preferenceCopy(preference), releases: available(), busy: state.busy || !idle() }),
+    refresh: async () => {
+      ensure();
+      const next = await listReleases(scopedFetch);
+      ensure();
+      catalog = next;
+      state.error = null;
+      render();
+      return available();
+    },
+    apply: async (next) => {
+      ensure();
+      if (state.busy || !idle() || host.document.querySelector("dialog[open]")) throw new Error("\u8BF7\u7B49\u5F53\u524D\u56DE\u590D\u6216\u64CD\u4F5C\u5B8C\u6210\uFF0C\u518D\u4FDD\u5B58\u7248\u672C\u9009\u62E9");
+      if (!validPreference(next)) throw new Error("\u65E0\u6548\u7684\u7248\u672C\u9009\u62E9");
+      const chosen = preferenceCopy(next);
+      if (chosen.mode === "pinned" && !available().some((r) => r.tag === chosen.tag)) throw new Error("\u8BE5\u7248\u672C\u4E0D\u5728\u516C\u5F00\u76EE\u5F55\u6216\u5DF2\u77E5\u7248\u672C\u4E2D\uFF0C\u8BF7\u5148\u5237\u65B0\u7248\u672C\u5217\u8868");
+      const stamp = identity();
+      const ensureSelection = () => {
+        ensure();
+        if (identity() !== stamp || !idle() || host.document.querySelector("dialog[open]")) throw new DOMException("\u804A\u5929\u6216\u64CD\u4F5C\u72B6\u6001\u5DF2\u7ECF\u6539\u53D8\uFF0C\u8BF7\u91CD\u65B0\u9009\u62E9", "AbortError");
+      };
+      state.busy = true;
+      state.error = null;
+      state.status = "\u6B63\u5728\u68C0\u67E5\u6240\u9009\u7248\u672C\u2026";
+      render();
+      try {
+        const release = chosen.mode === "pinned" ? await getRelease(chosen.tag) : await resolveLatest();
+        ensureSelection();
+        await store.set(`release:${release.tag}`, release);
+        ensureSelection();
+        await store.set(preferenceKey, chosen);
+        preference = chosen;
+        state.preference = chosen;
+        try {
+          ensureSelection();
+        } catch (error) {
+          state.status = "\u9009\u62E9\u5DF2\u4FDD\u5B58\uFF1B\u804A\u5929\u72B6\u6001\u5DF2\u6539\u53D8\uFF0C\u5C06\u5728\u4E0B\u6B21\u542F\u52A8\u65F6\u751F\u6548\u3002";
+          helper.toastr?.info(state.status);
+          return;
+        }
+        state.status = "\u9009\u62E9\u5DF2\u4FDD\u5B58\uFF0C\u6B63\u5728\u5237\u65B0\u2026";
+        render();
+        if (reload) await reload();
+        else if (helper !== host && typeof helper.reloadIframe === "function") {
+          await ownedRuntime?.dispose?.();
+          ensureSelection();
+          helper.reloadIframe();
+        } else host.location.reload();
+      } catch (error) {
+        state.error = error.message;
+        state.status = "\u5F53\u524D\u6E38\u620F\u7248\u672C\u672A\u66F4\u6362\u3002";
+        throw error;
+      } finally {
+        state.busy = false;
+        render();
+      }
+    },
+    dispose
+  };
+  host.__LandlordUpdater = api;
+  panel = mountVersionControls({ host, getState: api.getState, refresh: api.refresh, apply: api.apply });
   try {
-    const tag = await latestTag(fetcher);
-    selected = cached && compareVersions(tag, cached.tag) <= 0 ? cached : await downloadRelease(tag, fetcher);
-  } catch (error) {
-    host.console.warn("[\u623F\u4E1C\u6A21\u62DF\u5668] \u66F4\u65B0\u68C0\u67E5\u672A\u5B8C\u6210\uFF0C\u5C1D\u8BD5\u5DF2\u9A8C\u8BC1\u7248\u672C", error.message);
-    selected = cached && compareVersions(cached.tag, FALLBACK_TAG) >= 0 ? cached : await downloadRelease(FALLBACK_TAG, fetcher);
-  }
-  const attempts = [selected];
-  if (cached && cached.tag !== selected.tag) attempts.push(cached);
-  let lastError;
-  try {
+    const saved = await store.get(preferenceKey);
+    ensure();
+    if (validPreference(saved)) preference = preferenceCopy(saved);
+    state.preference = preference;
+    const own = await store.get(cacheKey);
+    ensure();
+    if (await validateRelease(own)) cached = own;
+    else {
+      const legacy = await store.get("last-good-release");
+      ensure();
+      if (await validateRelease(legacy)) cached = legacy;
+    }
+    state.status = "\u6B63\u5728\u52A0\u8F7D\u6240\u9009\u7248\u672C\u2026";
+    render();
+    let selected;
+    try {
+      selected = preference.mode === "pinned" ? await getRelease(preference.tag) : await resolveLatest();
+    } catch (error) {
+      ensure();
+      state.error = `\u6240\u9009\u7248\u672C\u52A0\u8F7D\u5931\u8D25\uFF1A${error.message}`;
+      selected = cached || await getRelease(FALLBACK_TAG);
+      notice = "\u6240\u9009\u7248\u672C\u672A\u80FD\u52A0\u8F7D\uFF0C\u5DF2\u4FDD\u7559\u9009\u62E9\u5E76\u5C1D\u8BD5\u4E0A\u6B21\u53EF\u7528\u7248\u672C\u3002";
+    }
+    const attempts = [selected];
+    if (cached && cached.tag !== selected.tag) attempts.push(cached);
+    let lastError;
     for (const release of attempts) {
       while (!controller.signal.aborted) {
+        ensure();
         await waitUntil(() => idle() && !host.document.querySelector("dialog[open]"), { signal: controller.signal, timeout: 3e5, interval: 100 });
+        ensure();
         const stamp = identity();
-        const isCurrent = () => !controller.signal.aborted && identity() === stamp && idle();
-        let transaction;
-        let blobUrl;
+        const isCurrent = () => !controller.signal.aborted && characterKey() === owner && identity() === stamp && idle();
+        let transaction, blobUrl;
         try {
-          if (!await validCache(release)) throw new Error("\u672C\u5730\u66F4\u65B0\u7F13\u5B58\u6821\u9A8C\u5931\u8D25");
+          if (!await validateRelease(release)) throw new Error("\u672C\u5730\u7248\u672C\u7F13\u5B58\u6821\u9A8C\u5931\u8D25");
           const content = JSON.parse(release["content.json"]);
-          transaction = await updateContent({ api: helper, store, content, baseline: { worldbook: baseline_5_20_default }, identity: characterKey() ?? stamp, isCurrent });
+          transaction = await updateContent({ api: helper, store, content, baseline: { worldbook: baseline_5_20_default }, identity: owner, isCurrent });
           if (!isCurrent()) throw new DOMException("\u804A\u5929\u5DF2\u7ECF\u6539\u53D8", "AbortError");
           blobUrl = URL.createObjectURL(new Blob([release["runtime.js"]], { type: "application/javascript" }));
           const module = await importer(blobUrl);
           if (!isCurrent()) throw new DOMException("\u804A\u5929\u5DF2\u7ECF\u6539\u53D8", "AbortError");
           const runtime = await module.start({ helper, host, store, content });
+          ownedRuntime = runtime;
           if (!isCurrent()) throw new DOMException("\u804A\u5929\u5DF2\u7ECF\u6539\u53D8", "AbortError");
           await transaction.commit();
-          await store.set(cacheKey, release);
-          if (transaction.conflicts.length) helper.toastr?.info(`\u5DF2\u4FDD\u7559 ${transaction.conflicts.length} \u5904\u672C\u5730\u4E16\u754C\u4E66\u4FEE\u6539\u6216\u7ED1\u5B9A\u8BBE\u7F6E\u3002`);
+          ensure();
+          cached = { ...release, selectionMode: notice ? release.selectionMode || preference.mode : preference.mode };
+          await store.set(`release:${release.tag}`, release);
+          ensure();
+          await store.set(cacheKey, cached);
+          ensure();
+          state.currentTag = release.tag;
+          state.busy = false;
+          state.status = notice || (preference.mode === "pinned" ? `\u5DF2\u56FA\u5B9A\u7248\u672C ${release.tag}\u3002` : "\u5F53\u524D\u8DDF\u968F\u6700\u65B0\u6B63\u5F0F\u7248\u3002");
+          if (transaction.conflicts.length) {
+            const message = `\u5DF2\u4FDD\u7559 ${transaction.conflicts.length} \u5904\u672C\u5730\u4E16\u754C\u4E66\u4FEE\u6539\u6216\u7ED1\u5B9A\u8BBE\u7F6E\u3002`;
+            state.status += ` ${message}`;
+            helper.toastr?.info(message);
+          }
+          render();
           return runtime;
         } catch (error) {
           lastError = error;
-          await host.LandlordRuntime?.dispose?.();
-          await transaction?.rollback?.();
-          if (error?.name === "AbortError" && !controller.signal.aborted) continue;
+          await ownedRuntime?.dispose?.();
+          ownedRuntime = null;
+          if (host.__LandlordUpdater === api) await transaction?.rollback?.();
+          ensure();
+          if (error?.name === "AbortError") continue;
+          state.error = `\u7248\u672C ${release.tag} \u542F\u52A8\u5931\u8D25\uFF1A${error.message}`;
+          notice = "\u6240\u9009\u7248\u672C\u542F\u52A8\u5931\u8D25\uFF0C\u5DF2\u5207\u6362\u5230\u53EF\u7528\u5907\u7528\u7248\u672C\u3002";
+          render();
+          if (release === attempts.at(-1) && !attempts.some((r) => r.tag === FALLBACK_TAG)) {
+            try {
+              attempts.push(await getRelease(FALLBACK_TAG));
+            } catch (fallbackError) {
+              ensure();
+              state.error += `\uFF1B\u5165\u53E3\u9ED8\u8BA4\u7248\u672C\u4E5F\u4E0D\u53EF\u7528\uFF1A${fallbackError.message}`;
+            }
+          }
           break;
         } finally {
           if (blobUrl) URL.revokeObjectURL(blobUrl);
@@ -1061,15 +1426,20 @@ async function boot({ helper = window, fetcher = fetch, importer = (url) => impo
       }
     }
     throw lastError || new DOMException("\u542F\u52A8\u5DF2\u53D6\u6D88", "AbortError");
-  } finally {
-    helper.removeEventListener("pagehide", leave);
+  } catch (error) {
+    state.busy = false;
+    state.error = error.message;
+    state.status = "\u542F\u52A8\u672A\u5B8C\u6210\uFF0C\u53EF\u4EE5\u5728\u6B64\u66F4\u6539\u7248\u672C\u540E\u91CD\u8BD5\u3002";
+    render();
+    if (error?.name === "AbortError") dispose();
+    throw error;
   }
 }
 if (typeof window !== "undefined" && !window.__LANDLORD_TEST__) {
   window.__landlordBootPromise ||= boot().catch((error) => {
     if (error?.name === "AbortError") return;
     console.error("[\u623F\u4E1C\u6A21\u62DF\u5668] \u542F\u52A8\u5931\u8D25", error);
-    window.toastr?.error(`\u623F\u4E1C\u6A21\u62DF\u5668\u542F\u52A8\u5931\u8D25\uFF1A${error.message}\u3002\u8BF7\u7A0D\u540E\u5237\u65B0\u91CD\u8BD5\u3002`);
+    window.toastr?.error(`\u623F\u4E1C\u6A21\u62DF\u5668\u542F\u52A8\u5931\u8D25\uFF1A${error.message}\u3002\u53EF\u5728\u201C\u7248\u672C\u4E0E\u66F4\u65B0\u201D\u4E2D\u9009\u62E9\u53EF\u7528\u7248\u672C\u91CD\u8BD5\u3002`);
     window.__landlordBootPromise = null;
   });
 }

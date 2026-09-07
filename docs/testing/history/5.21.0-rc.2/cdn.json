@@ -1,0 +1,43 @@
+{
+  "date": "2026-09-07T06:28:19.868Z",
+  "tag": "v5.21.0-rc.2",
+  "files": [
+    {
+      "file": "dist/release.json",
+      "status": 200,
+      "bytes": 357,
+      "sha256": "2c5446b7a8758c4c9c0449aff89d6e9b0440e29ee8875aea848da3bbe8ae493c"
+    },
+    {
+      "file": "dist/bootstrap.js",
+      "status": 200,
+      "bytes": 108440,
+      "sha256": "e262054e3f473586034cf4fe1d1fa99ec0c68e18d4cf55d53079ff5caeb4fe7f"
+    },
+    {
+      "file": "dist/runtime.js",
+      "status": 200,
+      "bytes": 1299091,
+      "sha256": "9f4fb1d8571fbf9b0a0d08fbf72a44cafc80a157c8eee3d462e6917a1876c8eb"
+    },
+    {
+      "file": "dist/content.json",
+      "status": 200,
+      "bytes": 131679,
+      "sha256": "8e9b7301e42f1b4c1f0861b497f2a1aa8f59d20a2b89504c1c658c9fc8072ee8"
+    },
+    {
+      "file": "exports/房东模拟器Z5.21.0-rc.2.json",
+      "status": 200,
+      "bytes": 144883,
+      "sha256": "43c9cbec48cec0d65d6d42b421aeef1d91d2a64e285ed63e9ce0d1eff96b603a"
+    },
+    {
+      "file": "exports/房东模拟器Z5.21.0-rc.2.png",
+      "status": 200,
+      "bytes": 1065752,
+      "sha256": "22dee4432844aba9d17a8589c8012252fe7d5b8460aabdf23b66846986f088f2"
+    }
+  ],
+  "result": "passed"
+}

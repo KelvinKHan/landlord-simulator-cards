@@ -159,14 +159,14 @@ export class LandlordRuntime {
     const box = doc.createElement('details'); box.id = 'landlord-controls';
     box.style.cssText = 'position:fixed;bottom:12px;right:12px;z-index:100001;background:#272331;color:#fff;padding:10px;border-radius:12px;max-width:320px;font:14px sans-serif;box-shadow:0 3px 18px #0005';
     const summary = doc.createElement('summary'); summary.textContent = `房东模拟器 · ${this.mode === 'original' ? '原版' : '二改版'} · ${VERSION}`; box.append(summary);
-    const desc = doc.createElement('p'); desc.textContent = '两套版本各自保留手机记录。切换版本会关闭当前应用窗口。'; box.append(desc);
+    const desc = doc.createElement('p'); desc.textContent = '原版与二改版各自保留手机记录。切换会关闭当前应用窗口。'; box.append(desc);
     for (const [mode,label] of [['original','使用原版'],['remix','使用二改版']]) {
       const button = doc.createElement('button'); button.textContent = label; button.disabled = mode === this.mode;
       button.onclick = async () => { button.disabled = true; try { await this.setMode(mode); } catch(e) { this.helper.toastr?.warning(e.message); button.disabled = false; } };
       box.append(button);
     }
     if (this.errors.length) { const p = doc.createElement('p'); p.textContent = `最近错误：${this.errors.at(-1).message}`; box.append(p); }
-    const note = doc.createElement('p'); note.textContent = '启动时检查正式版更新；游玩过程中保持当前版本。'; box.append(note);
+    const note = doc.createElement('p'); note.textContent = '发布版本在左下角“版本与更新”中选择；游玩过程中保持当前版本。'; box.append(note);
     doc.body.append(box);
   }
   async recoverOpening() {
