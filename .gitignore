@@ -1,0 +1,15 @@
+.DS_Store
+Thumbs.db
+__pycache__/
+*.py[cod]
+.venv/
+node_modules/
+.env
+.env.*
+!.env.example
+*.log
+.local/
+
+# 后续确定导出和发布流程后再选择纳入版本控制的文件。
+/exports/*
+!/exports/README.md

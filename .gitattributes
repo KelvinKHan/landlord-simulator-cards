@@ -1,0 +1,7 @@
+* text=auto
+*.md text eol=lf
+*.py text eol=lf
+*.png binary
+
+# 原始导出作为完整备份保存，禁止 Git 自动转换换行。
+originals/*.json -text
