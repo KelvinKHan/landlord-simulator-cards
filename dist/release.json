@@ -4,8 +4,8 @@
   "tag": "v5.21.0-rc.1",
   "files": {
     "runtime.js": {
-      "sha256": "ebb55e50c3ce597d48fc2b4b2b3865121babc1225ba44b191bc1d6dba83a1818",
-      "bytes": 1300596
+      "sha256": "73cedfbc94776631a2f7c5e7a3ed8f493dd6c9c137c9614c0d5a91e1baf12600",
+      "bytes": 1300887
     },
     "content.json": {
       "sha256": "3315a779e6dff21d2d355fd83a945a92ebaedd133cb66c353e338c164375f06a",

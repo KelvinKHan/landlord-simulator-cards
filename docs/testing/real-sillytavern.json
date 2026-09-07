@@ -1,5 +1,5 @@
 {
-  "date": "2026-09-07T05:42:54.063Z",
+  "date": "2026-09-07T06:02:09.357Z",
   "sillytavern": {
     "version": "1.18.0",
     "commit": "8172dcd0ee672d3cd9a5e5f7af134f91a45cd2b8"
@@ -13,6 +13,7 @@
     "in-game mode button switches to remix with 7 modules",
     "real swipe updates MVU and restarts modules",
     "workshop opening uses real MVU parse and replace APIs",
+    "real embedded regex and S22 preserve candidate selection and unsaved edits after native message redraw",
     "no runtime/page errors, no paid API requests, one helper script remains"
   ],
   "paidApiCalls": 0,

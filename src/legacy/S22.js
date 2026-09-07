@@ -819,7 +819,10 @@ async function beautifyMessage(messageId, forceRerender = false) {
     const element = retrieveDisplayedMessage(messageId)?.[0];
     const raw = getChatMessages(messageId)?.[0]?.message;
     if (!element || raw === undefined) return;
-    return landlord.renderMessage(messageId, {raw,config}, element,
+    // MVU may add/remove its status placeholder without changing the editable cards.
+    const blocks = [...raw.matchAll(/<(companion|tenantlore)\b[^>]*>[\s\S]*?<\/\1>/gi)].map(match => match[0]);
+    const stateKey = blocks.length ? JSON.stringify(blocks) : raw;
+    return landlord.renderMessage(messageId, {raw,config,stateKey}, element,
         () => beautifyMessageOnce(messageId, true));
 }
 async function beautifyMessageOnce(messageId, forceRerender = false) {

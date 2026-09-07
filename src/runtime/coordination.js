@@ -16,18 +16,19 @@ export class RenderCoordinator {
     return this.queues.get(key).run(async () => {
       const old = this.states.get(key);
       const signature = typeof source === 'string' ? source : JSON.stringify(source);
-      const content = typeof source === 'string' ? source : source.raw;
-      if (old?.source === signature && target.dataset.landlordRendered === old.token && target.querySelector('[data-landlord-render-marker]')) return;
-      if (old?.target.querySelector('[data-landlord-render-marker]')) old.snapshot = snapshotForm(old.target);
+      const content = typeof source === 'string' ? source : source.stateKey ?? source.raw;
+      if (old?.source === signature && target.dataset.landlordRendered === old.token && target.querySelector('[data-landlord-render-marker]') === old.marker) return;
+      if (old && old.marker?.parentNode === old.target) old.snapshot = snapshotForm(old.target);
+      const saved = old?.snapshot ? structuredClone(old.snapshot) : null;
       old?.dispose?.();
       const token = String(Date.now()) + Math.random().toString(36).slice(2);
       await render();
-      if (old?.content === content && old.snapshot) restoreForm(target,old.snapshot);
+      if (old?.content === content && saved) restoreForm(target,saved);
       const marker = target.ownerDocument.createElement('span');
       marker.hidden = true; marker.dataset.landlordRenderMarker = token; target.append(marker);
       target.dataset.landlordRendered = token;
-      const state = { source:signature,content,token,target,snapshot:snapshotForm(target) };
-      const capture = () => queueMicrotask(()=>{ state.snapshot=snapshotForm(target); });
+      const state = { source:signature,content,token,target,marker,snapshot:snapshotForm(target) };
+      const capture = () => { if (marker.parentNode === target) state.snapshot=snapshotForm(target); };
       for (const event of ['input','change','click']) target.addEventListener(event,capture);
       state.dispose=()=>{for(const event of ['input','change','click'])target.removeEventListener(event,capture)};
       this.states.set(key,state);

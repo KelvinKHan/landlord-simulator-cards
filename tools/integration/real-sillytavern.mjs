@@ -27,6 +27,7 @@ try{
   assert.ok(up,'isolated server must start');
   browser=await chromium.launch({headless:true});const context=await browser.newContext({viewport:{width:1440,height:1000}});const page=await context.newPage();
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  page.on('console',m=>{if(m.type()==='error' && /\[(房东模拟器|正文美化|AptOS|ChatSync|ChatDB)/.test(m.text()))errors.push(m.text())});
   const pkg=JSON.parse(await fs.readFile(path.join(root,'package.json')));
   const card=await fs.readFile(path.join(root,`exports/房东模拟器Z${pkg.version}.json`));
   const token=(await (await context.request.get(origin+'/csrf-token')).json()).token;
@@ -63,6 +64,17 @@ try{
   await page.evaluate(async greeting=>{const rt=LandlordRuntime;await rt.rebuildOpening(rt.scopes.find(s=>s.id==='S23'),greeting)},opening);
   assert.equal(await page.evaluate(()=>LandlordRuntime.readState().世界.年份),'2025年');
   report.checks.push('workshop opening uses real MVU parse and replace APIs');
+  const sample='<companion>候选人:\n名字: "测试租客"\n年龄: "25"</companion>\n<tenantlore>姓名：测试租客\n年龄：25\n描述：原始档案</tenantlore>';
+  await page.evaluate(async message=>{await TavernHelper.createChatMessages([{role:'assistant',message}])},sample);
+  await page.waitForFunction(()=>document.querySelector('.mes[mesid="1"] .beautify-edit-area'));
+  const area=page.locator('.mes[mesid="1"] .beautify-edit-area');
+  await area.fill('姓名：测试租客\n实际酒馆中未保存的修改');
+  await page.locator('.mes[mesid="1"] .beautify-candidate-card').click();
+  await page.evaluate(async message=>{await TavernHelper.setChatMessages([{message_id:1,message}],{refresh:'affected'})},sample);
+  await page.waitForFunction(()=>document.querySelector('.mes[mesid="1"] .beautify-edit-area')?.textContent.includes('未保存的修改'));
+  assert.equal(await page.locator('.mes[mesid="1"] .beautify-candidate-card').evaluate(el=>jQuery(el).data('selected')),true);
+  report.checks.push('real embedded regex and S22 preserve candidate selection and unsaved edits after native message redraw');
+
   const end=await page.evaluate(()=>({errors:LandlordRuntime.errors,scripts:document.querySelectorAll('iframe[id^="TH-script"]').length,books:TavernHelper.getWorldbookNames()}));
   assert.deepEqual(end.errors,[]);assert.equal(end.scripts,1);assert.deepEqual(errors,[]);assert.equal(report.paidApiCalls,0);
   report.checks.push('no runtime/page errors, no paid API requests, one helper script remains');

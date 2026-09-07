@@ -81,6 +81,9 @@ test('native redraw keeps candidate selection and unsaved tenant edits, then res
   });
   await expect(page.locator('.beautify-edit-area')).toContainText('尚未保存的修改');
   expect(await page.locator('.beautify-candidate-card').evaluate(el=>jQuery(el).data('selected'))).toBe(true);
+  await page.evaluate(async()=>{ctx.chat[0].mes+='\n<StatusPlaceHolderImpl/>';document.querySelector('.mes_text').innerHTML='MVU 补入状态栏';await eventSource.emit('character_message_rendered',0)});
+  await expect(page.locator('.beautify-edit-area')).toContainText('尚未保存的修改');
+
   await page.locator('.beautify-confirm-btn').click();
   expect(await page.evaluate(()=>fixtureWrites.filter(w=>w.command?.includes('测试租客')).length)).toBe(1);
   await page.evaluate(async()=>{ctx.chat[0].mes='<tenantlore>姓名：新租客\n描述：另一条回复</tenantlore>';document.querySelector('.mes_text').innerHTML='新回复';await eventSource.emit('message_edited',0)});
